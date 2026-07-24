@@ -14,7 +14,7 @@ from typing import cast
 import pytest
 
 from witnessgap import workspace100
-from witnessgap.canonical import JsonValue, canonical_json
+from witnessgap.canonical import JsonValue, canonical_digest, canonical_json
 from witnessgap.identifiability import (
     Evidence,
     InterventionObservation,
@@ -24,13 +24,21 @@ from witnessgap.identifiability import (
 )
 from witnessgap.model import Outcome
 from witnessgap.workspace100 import TEMPLATES
+from witnessgap.workspace100 import baselines as baseline_module
 from witnessgap.workspace100.baselines import (
+    BASELINE_BUNDLE_FORMAT,
+    BASELINE_SET_FORMAT,
+    BUILTIN_BASELINE_SET_ROOT,
     PUBLIC_BASELINE_VOCABULARY,
+    PUBLIC_BASELINE_VOCABULARY_DIGEST,
     BuiltinBaseline,
     BuiltinBaselineBundle,
+    BuiltinBaselineSet,
     PublicBaselineVocabulary,
     builtin_baseline_bundles,
+    builtin_baseline_set,
     public_baseline_vocabulary_digest,
+    public_baseline_vocabulary_payload,
 )
 from witnessgap.workspace100.evidence import ParticipantClaim, PublicEvidenceEnvelope
 from witnessgap.workspace100.generation import generate_workspace100
@@ -44,6 +52,7 @@ from witnessgap.workspace100.worker import (
     WorkerFailureKind,
     WorkerLimits,
     WorkerRunStatus,
+    python_worker_program_digest,
     run_worker_once,
 )
 
@@ -54,6 +63,9 @@ _WORKER_INPUT_FAILURE_CODE = 2
 _CASE_COUNT = 300
 _EXPECTED_PUBLIC_VOCABULARY_DIGEST = (
     "62be02f2222129a1d72aaa5329d0f1e687f1014326e91cbbf7b5141973c651dd"
+)
+_EXPECTED_BASELINE_SET_ROOT = (
+    "f8e5c3aadd426220d52d797cef178efc5aec51cd788092749cf46cf7edf53d4d"
 )
 _EXPECTED_BUNDLE_ROOTS = {
     BuiltinBaseline.ALWAYS_UNKNOWN: (
@@ -204,9 +216,10 @@ def _backend(
     bundle: BuiltinBaselineBundle,
     *,
     scratch_root: str,
+    program_source: bytes | None = None,
 ) -> LocalPythonProcessBackend:
     return LocalPythonProcessBackend(
-        bundle.program_source,
+        bundle.program_source if program_source is None else program_source,
         runtime_digest=_RUNTIME_DIGEST,
         interpreter=sys.executable,
         scratch_root=scratch_root,
@@ -293,6 +306,185 @@ def test_bundle_registry_is_closed_ordered_and_not_package_exported() -> None:
 
     assert "BuiltinBaseline" not in workspace100.__all__
     assert not hasattr(workspace100, "builtin_baseline_bundles")
+
+
+def test_baseline_set_is_self_contained_canonical_and_pinned() -> None:
+    baseline_set = builtin_baseline_set()
+    payload = baseline_set.to_canonical_bytes()
+    parsed = BuiltinBaselineSet.from_canonical_bytes(payload)
+
+    assert parsed == baseline_set
+    assert parsed.to_canonical_bytes() == payload
+    assert parsed.public_vocabulary_digest == _EXPECTED_PUBLIC_VOCABULARY_DIGEST
+    assert parsed.baseline_set_root == _EXPECTED_BASELINE_SET_ROOT
+    assert PUBLIC_BASELINE_VOCABULARY_DIGEST == _EXPECTED_PUBLIC_VOCABULARY_DIGEST
+    assert BUILTIN_BASELINE_SET_ROOT == _EXPECTED_BASELINE_SET_ROOT
+    assert parsed.to_payload()["public_vocabulary"] == (
+        public_baseline_vocabulary_payload()
+    )
+    assert parsed.bundle_digests == tuple(
+        root for _, root in _EXPECTED_BUNDLE_ROOTS.values()
+    )
+    assert tuple(
+        artifact.bundle.baseline for artifact in parsed.bundles
+    ) == tuple(BuiltinBaseline)
+    assert "BuiltinBaselineSet" not in workspace100.__all__
+    assert not hasattr(workspace100, "builtin_baseline_set")
+
+
+def test_parsed_baseline_set_sources_retain_worker_identity(
+    baseline_scratch_root: str,
+) -> None:
+    parsed = BuiltinBaselineSet.from_canonical_bytes(
+        builtin_baseline_set().to_canonical_bytes()
+    )
+    envelope = _envelope(PUBLIC_BASELINE_VOCABULARY[0], view="trace")
+
+    for artifact in parsed.bundles:
+        bundle = artifact.bundle
+        assert (
+            python_worker_program_digest(artifact.program_source)
+            == bundle.program_implementation_digest
+        )
+        record = run_worker_once(
+            bundle.worker_program,
+            envelope,
+            backend=_backend(
+                bundle,
+                scratch_root=baseline_scratch_root,
+                program_source=artifact.program_source,
+            ),
+        )
+        assert record.status is WorkerRunStatus.CLAIMED
+
+
+def test_baseline_set_parser_rejects_open_reordered_and_corrupt_records() -> None:
+    canonical = builtin_baseline_set().to_canonical_bytes()
+    parsed = cast(dict[str, JsonValue], json.loads(canonical))
+
+    mutations: list[dict[str, JsonValue]] = []
+
+    missing = dict(parsed)
+    missing.pop("baseline_set_root")
+    mutations.append(missing)
+
+    opened = dict(parsed)
+    opened["unexpected"] = "value"
+    mutations.append(opened)
+
+    reordered_bundles = dict(parsed)
+    reordered_bundles["bundles"] = tuple(
+        reversed(cast(list[JsonValue], parsed["bundles"]))
+    )
+    mutations.append(reordered_bundles)
+
+    reordered_vocabulary = cast(
+        dict[str, JsonValue],
+        json.loads(canonical),
+    )
+    vocabulary = cast(
+        dict[str, JsonValue],
+        reordered_vocabulary["public_vocabulary"],
+    )
+    vocabulary["entries"] = tuple(
+        reversed(cast(list[JsonValue], vocabulary["entries"]))
+    )
+    mutations.append(reordered_vocabulary)
+
+    uppercase_source = cast(dict[str, JsonValue], json.loads(canonical))
+    first_artifact = cast(
+        dict[str, JsonValue],
+        cast(list[JsonValue], uppercase_source["bundles"])[0],
+    )
+    first_artifact["program_source_hex"] = cast(
+        str,
+        first_artifact["program_source_hex"],
+    ).upper()
+    mutations.append(uppercase_source)
+
+    wrong_root = dict(parsed)
+    wrong_root["baseline_set_root"] = "0" * _SHA256_HEX_LENGTH
+    mutations.append(wrong_root)
+
+    for mutation in mutations:
+        with pytest.raises(ValueError):
+            BuiltinBaselineSet.from_canonical_bytes(canonical_json(mutation))
+
+    for noncanonical in (
+        canonical.rstrip(b"\n"),
+        canonical + b"\n",
+        b" " + canonical,
+    ):
+        with pytest.raises(ValueError, match="canonical"):
+            BuiltinBaselineSet.from_canonical_bytes(noncanonical)
+
+    with pytest.raises(ValueError, match=r"1\.\."):
+        BuiltinBaselineSet.from_canonical_bytes(b"{" * ((1 << 20) + 1))
+    with pytest.raises(ValueError, match="unsupported JSON"):
+        BuiltinBaselineSet.from_canonical_bytes(b'{"value":"\\ud800"}\n')
+    with pytest.raises(TypeError, match="exact bytes"):
+        BuiltinBaselineSet.from_canonical_bytes(cast(bytes, bytearray(canonical)))
+
+
+def test_baseline_set_parser_rejects_a_self_consistent_alternate_program() -> None:
+    payload = cast(
+        dict[str, JsonValue],
+        json.loads(builtin_baseline_set().to_canonical_bytes()),
+    )
+    artifacts = cast(list[JsonValue], payload["bundles"])
+    artifact = cast(dict[str, JsonValue], artifacts[0])
+    bundle = cast(dict[str, JsonValue], artifact["bundle"])
+    source = bytes.fromhex(cast(str, artifact["program_source_hex"])) + b"\n"
+
+    artifact["program_source_hex"] = source.hex()
+    bundle["program_implementation_digest"] = python_worker_program_digest(source)
+    artifact["bundle_digest"] = canonical_digest(BASELINE_BUNDLE_FORMAT, bundle)
+    payload["baseline_set_root"] = canonical_digest(
+        BASELINE_SET_FORMAT,
+        {
+            "bundle_digests": tuple(
+                cast(dict[str, JsonValue], entry)["bundle_digest"]
+                for entry in artifacts
+            ),
+            "format": BASELINE_SET_FORMAT,
+            "protocol_id": "workspace-100-v1",
+            "public_vocabulary_digest": payload["public_vocabulary_digest"],
+        },
+    )
+
+    with pytest.raises(ValueError, match="source"):
+        BuiltinBaselineSet.from_canonical_bytes(canonical_json(payload))
+
+
+def test_frozen_roots_reject_post_import_vocabulary_and_source_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    vocabulary = PUBLIC_BASELINE_VOCABULARY[0]
+    original_repair_atom = vocabulary.repair_atom
+    try:
+        object.__setattr__(
+            vocabulary,
+            "repair_atom",
+            f"{original_repair_atom}_alternate",
+        )
+        with pytest.raises(ValueError, match="frozen vocabulary"):
+            builtin_baseline_set()
+    finally:
+        object.__setattr__(vocabulary, "repair_atom", original_repair_atom)
+
+    with monkeypatch.context() as mutation:
+        mutation.setattr(
+            baseline_module,
+            "_BASELINE_WORKER_TEMPLATE",
+            f"{baseline_module._BASELINE_WORKER_TEMPLATE}\n",
+        )
+        with pytest.raises(ValueError, match="frozen built-in source"):
+            builtin_baseline_set()
+
+    assert public_baseline_vocabulary_digest() == (
+        PUBLIC_BASELINE_VOCABULARY_DIGEST
+    )
+    assert builtin_baseline_set().baseline_set_root == BUILTIN_BASELINE_SET_ROOT
 
 
 def test_standalone_sources_have_only_the_minimal_stdlib_capability() -> None:
@@ -526,6 +718,9 @@ def test_actual_workspace100_matrix_matches_the_frozen_construction_expectations
     evidence_views: Workspace100EvidenceViews,
     baseline_scratch_root: str,
 ) -> None:
+    parsed_baseline_set = BuiltinBaselineSet.from_canonical_bytes(
+        builtin_baseline_set().to_canonical_bytes()
+    )
     vocabulary_by_action = {
         entry.action_tool: entry for entry in PUBLIC_BASELINE_VOCABULARY
     }
@@ -541,8 +736,13 @@ def test_actual_workspace100_matrix_matches_the_frozen_construction_expectations
         ),
     }
 
-    for bundle_index, bundle in enumerate(builtin_baseline_bundles()):
-        backend = _backend(bundle, scratch_root=baseline_scratch_root)
+    for bundle_index, artifact in enumerate(parsed_baseline_set.bundles):
+        bundle = artifact.bundle
+        backend = _backend(
+            bundle,
+            scratch_root=baseline_scratch_root,
+            program_source=artifact.program_source,
+        )
         cases = (
             evidence_views.cases
             if bundle_index % 2 == 0

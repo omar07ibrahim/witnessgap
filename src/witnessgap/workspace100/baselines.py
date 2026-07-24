@@ -8,21 +8,34 @@ repository resource.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import cast
 
 from witnessgap.canonical import JsonValue, canonical_digest, canonical_json
 from witnessgap.workspace100.records import PROTOCOL_ID
 from witnessgap.workspace100.worker import WorkerProgram, python_worker_program_digest
 
+BASELINE_ARTIFACT_FORMAT = "witnessgap.workspace100-baseline-artifact.v1"
 BASELINE_BUNDLE_FORMAT = "witnessgap.workspace100-baseline-bundle.v1"
+BASELINE_SET_FORMAT = "witnessgap.workspace100-baseline-set.v1"
 PUBLIC_BASELINE_VOCABULARY_FORMAT = (
     "witnessgap.workspace100-public-baseline-vocabulary.v1"
+)
+PUBLIC_BASELINE_VOCABULARY_DIGEST = (
+    "62be02f2222129a1d72aaa5329d0f1e687f1014326e91cbbf7b5141973c651dd"
+)
+BUILTIN_BASELINE_SET_ROOT = (
+    "f8e5c3aadd426220d52d797cef178efc5aec51cd788092749cf46cf7edf53d4d"
 )
 
 _BASELINE_BUNDLE_DOMAIN = "witnessgap.workspace100-baseline-bundle.v1"
 _PUBLIC_VOCABULARY_DOMAIN = "witnessgap.workspace100-public-baseline-vocabulary.v1"
+_MAX_BASELINE_SET_BYTES = 1 << 20
+_DIGEST = re.compile(r"^[0-9a-f]{64}$")
+_LOWER_HEX = re.compile(r"^[0-9a-f]+$")
 _IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]{0,95}$")
 _TEMPLATE_COUNT = 5
 
@@ -34,6 +47,18 @@ class BuiltinBaseline(StrEnum):
     FORCED_ENVIRONMENT = "forced_environment"
     REFRESH_SUCCESS_ONLY = "refresh_success_only"
     REFRESH_OUTCOME = "refresh_outcome"
+
+
+def _expected_program_digest(baseline: BuiltinBaseline) -> str:
+    if baseline is BuiltinBaseline.ALWAYS_UNKNOWN:
+        return "464fc2b8de3034120857a551401a89d12b1fc8cd4e2eeafeedc4ca2416aa90f6"
+    if baseline is BuiltinBaseline.FORCED_ENVIRONMENT:
+        return "3bca346813676cec998857d8f406cab80533b939ce6e6f4a1a559e1740a2b90d"
+    if baseline is BuiltinBaseline.REFRESH_SUCCESS_ONLY:
+        return "6c813f81504177adf6dc86ea8583f104f4a395eb819df7dbd6d3c6528dd95185"
+    if baseline is BuiltinBaseline.REFRESH_OUTCOME:
+        return "e2ea0d5fef5e7817087c3d22508911d12bf3b9b5b9ad0cdf1890dd07c19deb02"
+    raise ValueError("baseline program identity is unsupported")
 
 
 @dataclass(frozen=True, order=True, slots=True)
@@ -72,6 +97,27 @@ class PublicBaselineVocabulary:
             "refresh_atom": self.refresh_atom,
             "repair_atom": self.repair_atom,
         }
+
+    @classmethod
+    def from_payload(cls, payload: object) -> PublicBaselineVocabulary:
+        raw = _closed_object(
+            payload,
+            {
+                "action_tool",
+                "epoch_probe",
+                "lookup_tool",
+                "refresh_atom",
+                "repair_atom",
+            },
+            label="public baseline vocabulary entry",
+        )
+        return cls(
+            action_tool=_required_string(raw, "action_tool"),
+            lookup_tool=_required_string(raw, "lookup_tool"),
+            epoch_probe=_required_string(raw, "epoch_probe"),
+            refresh_atom=_required_string(raw, "refresh_atom"),
+            repair_atom=_required_string(raw, "repair_atom"),
+        )
 
 
 def _require_identifier(value: object, *, field: str) -> None:
@@ -132,7 +178,11 @@ class BuiltinBaselineBundle:
             raise TypeError("baseline bundle requires an exact BuiltinBaseline")
         _validate_public_vocabulary()
         source = _render_worker_source(self.baseline)
-        python_worker_program_digest(source)
+        if (
+            python_worker_program_digest(source)
+            != _expected_program_digest(self.baseline)
+        ):
+            raise ValueError("baseline program source is not the frozen built-in source")
 
     @property
     def method_id(self) -> str:
@@ -166,9 +216,215 @@ class BuiltinBaselineBundle:
             "public_vocabulary_digest": public_baseline_vocabulary_digest(),
         }
 
+    @classmethod
+    def from_payload(cls, payload: object) -> BuiltinBaselineBundle:
+        raw = _closed_object(
+            payload,
+            {
+                "baseline",
+                "format",
+                "method_id",
+                "program_implementation_digest",
+                "protocol_id",
+                "public_vocabulary_digest",
+            },
+            label="baseline bundle",
+        )
+        if raw["format"] != BASELINE_BUNDLE_FORMAT:
+            raise ValueError("baseline bundle format is unsupported")
+        if raw["protocol_id"] != PROTOCOL_ID:
+            raise ValueError("baseline bundle protocol is unsupported")
+        try:
+            baseline = BuiltinBaseline(_required_string(raw, "baseline"))
+        except ValueError as error:
+            raise ValueError("baseline bundle method is unsupported") from error
+        bundle = cls(baseline)
+        for field, expected in (
+            ("method_id", bundle.method_id),
+            (
+                "program_implementation_digest",
+                bundle.program_implementation_digest,
+            ),
+            (
+                "public_vocabulary_digest",
+                public_baseline_vocabulary_digest(),
+            ),
+        ):
+            actual = _required_string(raw, field)
+            if actual != expected:
+                raise ValueError(f"baseline bundle {field} contradicts its source")
+        return bundle
+
     @property
     def bundle_digest(self) -> str:
         return canonical_digest(_BASELINE_BUNDLE_DOMAIN, self.to_payload())
+
+
+@dataclass(frozen=True, slots=True)
+class BuiltinBaselineArtifact:
+    """One exact built-in bundle plus source bytes needed to rerun it."""
+
+    bundle: BuiltinBaselineBundle
+    program_source: bytes
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+    def validate(self) -> None:
+        if type(self.bundle) is not BuiltinBaselineBundle:
+            raise TypeError("baseline artifact requires an exact bundle")
+        if type(self.program_source) is not bytes or not self.program_source:
+            raise TypeError("baseline artifact source must be non-empty exact bytes")
+        self.bundle.validate()
+        if self.program_source != self.bundle.program_source:
+            raise ValueError("baseline artifact source is not the frozen built-in source")
+        if (
+            python_worker_program_digest(self.program_source)
+            != self.bundle.program_implementation_digest
+        ):
+            raise ValueError("baseline artifact source contradicts its program digest")
+
+    def to_payload(self) -> dict[str, JsonValue]:
+        self.validate()
+        return {
+            "bundle": self.bundle.to_payload(),
+            "bundle_digest": self.bundle.bundle_digest,
+            "format": BASELINE_ARTIFACT_FORMAT,
+            "program_source_hex": self.program_source.hex(),
+        }
+
+    @classmethod
+    def from_payload(cls, payload: object) -> BuiltinBaselineArtifact:
+        raw = _closed_object(
+            payload,
+            {
+                "bundle",
+                "bundle_digest",
+                "format",
+                "program_source_hex",
+            },
+            label="baseline artifact",
+        )
+        if raw["format"] != BASELINE_ARTIFACT_FORMAT:
+            raise ValueError("baseline artifact format is unsupported")
+        bundle = BuiltinBaselineBundle.from_payload(raw["bundle"])
+        stored_bundle_digest = _required_digest(raw, "bundle_digest")
+        if stored_bundle_digest != bundle.bundle_digest:
+            raise ValueError("baseline artifact bundle digest contradicts its bundle")
+        source_hex = _required_string(raw, "program_source_hex")
+        if (
+            not source_hex
+            or len(source_hex) % 2
+            or _LOWER_HEX.fullmatch(source_hex) is None
+        ):
+            raise ValueError("baseline artifact source must be non-empty lowercase hex")
+        return cls(bundle=bundle, program_source=bytes.fromhex(source_hex))
+
+
+@dataclass(frozen=True, slots=True)
+class BuiltinBaselineSet:
+    """Self-contained, canonical release record for the four built-in controls."""
+
+    public_vocabulary: tuple[PublicBaselineVocabulary, ...]
+    bundles: tuple[BuiltinBaselineArtifact, ...]
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+    def validate(self) -> None:
+        if (
+            type(self.public_vocabulary) is not tuple
+            or any(
+                type(entry) is not PublicBaselineVocabulary
+                for entry in self.public_vocabulary
+            )
+        ):
+            raise TypeError("baseline set vocabulary must be an exact tuple")
+        if self.public_vocabulary != PUBLIC_BASELINE_VOCABULARY:
+            raise ValueError("baseline set vocabulary is not the frozen public vocabulary")
+        if (
+            type(self.bundles) is not tuple
+            or any(type(entry) is not BuiltinBaselineArtifact for entry in self.bundles)
+        ):
+            raise TypeError("baseline set bundles must be an exact tuple")
+        if tuple(entry.bundle.baseline for entry in self.bundles) != tuple(
+            BuiltinBaseline
+        ):
+            raise ValueError("baseline set must contain each built-in once in release order")
+        for entry in self.public_vocabulary:
+            entry.validate()
+        for artifact in self.bundles:
+            artifact.validate()
+        method_ids = tuple(artifact.bundle.method_id for artifact in self.bundles)
+        program_digests = tuple(
+            artifact.bundle.program_implementation_digest
+            for artifact in self.bundles
+        )
+        if len(set(method_ids)) != len(self.bundles):
+            raise ValueError("baseline set method IDs must be unique")
+        if len(set(program_digests)) != len(self.bundles):
+            raise ValueError("baseline set program digests must be unique")
+        if len(set(self.bundle_digests)) != len(self.bundles):
+            raise ValueError("baseline set bundle digests must be unique")
+        derived_root = canonical_digest(
+            BASELINE_SET_FORMAT,
+            {
+                "bundle_digests": self.bundle_digests,
+                "format": BASELINE_SET_FORMAT,
+                "protocol_id": PROTOCOL_ID,
+                "public_vocabulary_digest": _public_baseline_vocabulary_digest(
+                    self.public_vocabulary
+                ),
+            },
+        )
+        if derived_root != BUILTIN_BASELINE_SET_ROOT:
+            raise ValueError("baseline set root is not the frozen built-in root")
+
+    @property
+    def public_vocabulary_digest(self) -> str:
+        self.validate()
+        return _public_baseline_vocabulary_digest(self.public_vocabulary)
+
+    @property
+    def bundle_digests(self) -> tuple[str, ...]:
+        return tuple(artifact.bundle.bundle_digest for artifact in self.bundles)
+
+    def root_payload(self) -> dict[str, JsonValue]:
+        self.validate()
+        return {
+            "bundle_digests": self.bundle_digests,
+            "format": BASELINE_SET_FORMAT,
+            "protocol_id": PROTOCOL_ID,
+            "public_vocabulary_digest": _public_baseline_vocabulary_digest(
+                self.public_vocabulary
+            ),
+        }
+
+    @property
+    def baseline_set_root(self) -> str:
+        return canonical_digest(BASELINE_SET_FORMAT, self.root_payload())
+
+    def to_payload(self) -> dict[str, JsonValue]:
+        self.validate()
+        return {
+            "baseline_set_root": self.baseline_set_root,
+            "bundles": tuple(artifact.to_payload() for artifact in self.bundles),
+            "format": BASELINE_SET_FORMAT,
+            "protocol_id": PROTOCOL_ID,
+            "public_vocabulary": _public_baseline_vocabulary_payload(
+                self.public_vocabulary
+            ),
+            "public_vocabulary_digest": _public_baseline_vocabulary_digest(
+                self.public_vocabulary
+            ),
+        }
+
+    def to_canonical_bytes(self) -> bytes:
+        return canonical_json(self.to_payload())
+
+    @classmethod
+    def from_canonical_bytes(cls, payload: bytes) -> BuiltinBaselineSet:
+        return _parse_builtin_baseline_set(payload)
 
 
 def builtin_baseline_bundles() -> tuple[BuiltinBaselineBundle, ...]:
@@ -177,16 +433,54 @@ def builtin_baseline_bundles() -> tuple[BuiltinBaselineBundle, ...]:
     return tuple(BuiltinBaselineBundle(baseline) for baseline in BuiltinBaseline)
 
 
+def builtin_baseline_set() -> BuiltinBaselineSet:
+    """Return the self-contained release record for all built-in methods."""
+
+    return BuiltinBaselineSet(
+        public_vocabulary=PUBLIC_BASELINE_VOCABULARY,
+        bundles=tuple(
+            BuiltinBaselineArtifact(
+                bundle=bundle,
+                program_source=bundle.program_source,
+            )
+            for bundle in builtin_baseline_bundles()
+        ),
+    )
+
+
+def public_baseline_vocabulary_payload() -> dict[str, JsonValue]:
+    """Return the machine-readable vocabulary embedded in protocol artifacts."""
+
+    _validate_public_vocabulary()
+    return _public_baseline_vocabulary_payload(PUBLIC_BASELINE_VOCABULARY)
+
+
 def public_baseline_vocabulary_digest() -> str:
     """Bind the documented semantics available to every participant bundle."""
 
-    _validate_public_vocabulary()
-    payload: dict[str, JsonValue] = {
-        "entries": tuple(entry.to_payload() for entry in PUBLIC_BASELINE_VOCABULARY),
+    return canonical_digest(
+        _PUBLIC_VOCABULARY_DOMAIN,
+        public_baseline_vocabulary_payload(),
+    )
+
+
+def _public_baseline_vocabulary_payload(
+    entries: tuple[PublicBaselineVocabulary, ...],
+) -> dict[str, JsonValue]:
+    return {
+        "entries": tuple(entry.to_payload() for entry in entries),
         "format": PUBLIC_BASELINE_VOCABULARY_FORMAT,
         "protocol_id": PROTOCOL_ID,
     }
-    return canonical_digest(_PUBLIC_VOCABULARY_DOMAIN, payload)
+
+
+def _public_baseline_vocabulary_digest(
+    entries: tuple[PublicBaselineVocabulary, ...],
+) -> str:
+    return canonical_digest(
+        _PUBLIC_VOCABULARY_DOMAIN,
+        _public_baseline_vocabulary_payload(entries),
+    )
 
 
 def _validate_public_vocabulary() -> None:
@@ -211,6 +505,149 @@ def _validate_public_vocabulary() -> None:
         )
         if len(set(values)) != _TEMPLATE_COUNT:
             raise ValueError(f"public baseline {field} values must be unique")
+    if (
+        _public_baseline_vocabulary_digest(PUBLIC_BASELINE_VOCABULARY)
+        != PUBLIC_BASELINE_VOCABULARY_DIGEST
+    ):
+        raise ValueError("public baseline vocabulary is not the frozen vocabulary")
+
+
+def _parse_builtin_baseline_set(payload: object) -> BuiltinBaselineSet:
+    raw = _parse_baseline_set_object(payload)
+    _require_closed_fields(
+        raw,
+        {
+            "baseline_set_root",
+            "bundles",
+            "format",
+            "protocol_id",
+            "public_vocabulary",
+            "public_vocabulary_digest",
+        },
+        label="baseline set",
+    )
+    if raw["format"] != BASELINE_SET_FORMAT:
+        raise ValueError("baseline set format is unsupported")
+    if raw["protocol_id"] != PROTOCOL_ID:
+        raise ValueError("baseline set protocol is unsupported")
+
+    public_vocabulary = _parse_public_baseline_vocabulary(
+        raw["public_vocabulary"]
+    )
+    bundles_raw = _required_array(raw, "bundles")
+    if len(bundles_raw) != len(BuiltinBaseline):
+        raise ValueError("baseline set must contain exactly four bundles")
+    baseline_set = BuiltinBaselineSet(
+        public_vocabulary=public_vocabulary,
+        bundles=tuple(
+            BuiltinBaselineArtifact.from_payload(item) for item in bundles_raw
+        ),
+    )
+    stored_vocabulary_digest = _required_digest(
+        raw,
+        "public_vocabulary_digest",
+    )
+    if stored_vocabulary_digest != baseline_set.public_vocabulary_digest:
+        raise ValueError("stored public vocabulary digest contradicts its entries")
+    stored_set_root = _required_digest(raw, "baseline_set_root")
+    if stored_set_root != baseline_set.baseline_set_root:
+        raise ValueError("stored baseline set root contradicts its bundles")
+    if baseline_set.to_canonical_bytes() != payload:
+        raise ValueError("baseline set failed canonical round-trip")
+    return baseline_set
+
+
+def _parse_baseline_set_object(payload: object) -> dict[str, object]:
+    if type(payload) is not bytes:
+        raise TypeError("baseline set payload must be exact bytes")
+    if not payload or len(payload) > _MAX_BASELINE_SET_BYTES:
+        raise ValueError(
+            f"baseline set payload must contain 1..{_MAX_BASELINE_SET_BYTES} bytes"
+        )
+    try:
+        raw: object = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as error:
+        raise ValueError("baseline set is not valid UTF-8 JSON") from error
+    try:
+        canonical = (
+            type(raw) is dict
+            and canonical_json(cast(JsonValue, raw)) == payload
+        )
+    except (RecursionError, TypeError, UnicodeEncodeError) as error:
+        raise ValueError("baseline set contains unsupported JSON") from error
+    if not canonical:
+        raise ValueError("baseline set is not one canonical JSON object")
+    return cast(dict[str, object], raw)
+
+
+def _parse_public_baseline_vocabulary(
+    payload: object,
+) -> tuple[PublicBaselineVocabulary, ...]:
+    raw = _closed_object(
+        payload,
+        {"entries", "format", "protocol_id"},
+        label="public baseline vocabulary",
+    )
+    if raw["format"] != PUBLIC_BASELINE_VOCABULARY_FORMAT:
+        raise ValueError("public baseline vocabulary format is unsupported")
+    if raw["protocol_id"] != PROTOCOL_ID:
+        raise ValueError("public baseline vocabulary protocol is unsupported")
+    entries_raw = _required_array(raw, "entries")
+    if len(entries_raw) != _TEMPLATE_COUNT:
+        raise ValueError("public baseline vocabulary must contain five entries")
+    entries = tuple(
+        PublicBaselineVocabulary.from_payload(item) for item in entries_raw
+    )
+    if entries != PUBLIC_BASELINE_VOCABULARY:
+        raise ValueError("public baseline vocabulary is not the frozen vocabulary")
+    return entries
+
+
+def _closed_object(
+    value: object,
+    fields: set[str],
+    *,
+    label: str,
+) -> dict[str, object]:
+    if type(value) is not dict:
+        raise ValueError(f"{label} must be an object")
+    raw = cast(dict[str, object], value)
+    _require_closed_fields(raw, fields, label=label)
+    return raw
+
+
+def _require_closed_fields(
+    payload: dict[str, object],
+    fields: set[str],
+    *,
+    label: str,
+) -> None:
+    if set(payload) != fields:
+        raise ValueError(f"{label} contains unknown or missing fields")
+
+
+def _required_array(
+    payload: dict[str, object],
+    field: str,
+) -> list[object]:
+    value = payload[field]
+    if type(value) is not list:
+        raise ValueError(f"{field} must be an array")
+    return cast(list[object], value)
+
+
+def _required_string(payload: dict[str, object], field: str) -> str:
+    value = payload[field]
+    if type(value) is not str:
+        raise ValueError(f"{field} must be a string")
+    return value
+
+
+def _required_digest(payload: dict[str, object], field: str) -> str:
+    value = _required_string(payload, field)
+    if _DIGEST.fullmatch(value) is None:
+        raise ValueError(f"{field} must be one lowercase SHA-256 digest")
+    return value
 
 
 def _source_vocabulary_payload() -> dict[str, JsonValue]:

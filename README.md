@@ -147,9 +147,13 @@ Four deterministic controls now run as pinned standalone bundles:
 `always_unknown`, `forced_environment`, `refresh_success_only`, and
 `refresh_outcome`. Their child sources import only `json` and `sys`, ignore
 digest fingerprints and incidental trace values, and use a documented
-five-entry public tool-to-witness vocabulary. The complete 4×300 construction
-matrix is exercised through 1,200 fresh worker processes, but it is not
-presented as a benchmark score before the evaluator and report roots exist.
+five-entry public tool-to-witness vocabulary. One self-contained canonical
+baseline set publishes exact bytes for all four standalone programs and binds
+their ordered bundle roots under aggregate root
+`f8e5c3aadd426220d52d797cef178efc5aec51cd788092749cf46cf7edf53d4d`.
+The complete 4×300 construction matrix is exercised through 1,200 fresh
+worker processes, but it is not presented as a benchmark score before the
+evaluator and report roots exist.
 
 This is verified in-memory evidence and truth construction, not a benchmark
 result. The next engineering slice is a case-order-independent 300-case

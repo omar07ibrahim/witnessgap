@@ -284,6 +284,16 @@ is explicitly declared public protocol knowledge in
 method is reported separately from these baselines. No LLM judge or learned
 model is part of Workspace-100.
 
+The vocabulary digest
+`62be02f2222129a1d72aaa5329d0f1e687f1014326e91cbbf7b5141973c651dd`
+and baseline-set root
+`f8e5c3aadd426220d52d797cef178efc5aec51cd788092749cf46cf7edf53d4d`
+complete the v1 participant contract. No result or release preceded this
+declaration. A later vocabulary or membership change requires a new protocol
+ID rather than silently revising `workspace-100-v1`. Here membership means the
+exact ordered `(method_id, program_implementation_digest)` pairs; changing
+source bytes or either identity also requires a new protocol ID.
+
 ## 8. Metrics
 
 Metrics are computed per view and macro-averaged by template:
@@ -363,6 +373,7 @@ The deterministic release layout is:
 ```text
 workspace100/v1/
   protocol.json
+  baselines/baseline-set.json
   authored/templates.json
   authored/variants.json
   sealed/sources.jsonl
@@ -374,6 +385,15 @@ workspace100/v1/
   results/report.json
   release-manifest.json
 ```
+
+`protocol.json` carries the closed `public_baseline_vocabulary` payload and
+its digest. Its canonical vocabulary encoding and digest must be byte-for-byte
+and digest-for-digest identical to the corresponding baseline-set fields. The
+latter is self-contained: its four ordered artifacts carry the exact source
+bytes as lowercase hex, per-program identities, and bundle roots. The trusted
+evaluator parses the set and stages those decoded bytes. The participant
+process receives only that staged source plus one evidence envelope; the
+authoring package is neither installed nor mounted in the child.
 
 `sealed`, `verified`, and `truth` are never mounted into the participant
 worker. They may be published after evaluation for reproducibility; this
@@ -400,8 +420,8 @@ Generation is rejected unless all gates pass:
    capability and is covered by the declared manifest;
 10. search and independent verifier profiles agree on all episodes;
 11. no participant-visible ID contains a target or completion-side label;
-12. two clean generations have identical registry, evidence, panel, truth, and
-    report roots;
+12. two clean generations have identical public-vocabulary, baseline-set,
+    registry, evidence, panel, truth, and report roots;
 13. exactly 300 unique evidence digests are scored with the 50/50/100/100
     per-view denominators;
 14. recursive case-folded leak scanning finds no target/side label in any
@@ -410,8 +430,14 @@ Generation is rejected unless all gates pass:
     evidence references only verified receipts;
 16. a worker isolation test proves participant code cannot import or read
     sealed sources and labels;
-17. the release manifest pins protocol, source, registry, panel, evidence,
-    truth, claim, report, adapter, verifier, and trust-anchor roots.
+17. the release manifest pins protocol, public-vocabulary, baseline-set,
+    source, registry, panel, evidence, truth, claim, report, adapter, verifier,
+    worker, backend, runtime, and trust-anchor roots;
+18. the claim-set method registry contains each of the four pinned
+    `(method_id, program_implementation_digest)` pairs exactly once, every run
+    references one registry identity, each identity has exactly 300 unique
+    evidence runs, and the closed claim set and report bind the aggregate
+    baseline-set root.
 
 Expected view-level assertions:
 
