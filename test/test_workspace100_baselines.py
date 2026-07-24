@@ -40,6 +40,10 @@ from witnessgap.workspace100.baselines import (
     public_baseline_vocabulary_digest,
     public_baseline_vocabulary_payload,
 )
+from witnessgap.workspace100.claims import (
+    build_workspace100_claim_set,
+    load_verified_workspace100_claim_set,
+)
 from witnessgap.workspace100.evidence import ParticipantClaim, PublicEvidenceEnvelope
 from witnessgap.workspace100.generation import generate_workspace100
 from witnessgap.workspace100.views import (
@@ -51,6 +55,7 @@ from witnessgap.workspace100.worker import (
     LocalPythonProcessBackend,
     WorkerFailureKind,
     WorkerLimits,
+    WorkerRunRecord,
     WorkerRunStatus,
     python_worker_program_digest,
     run_worker_once,
@@ -61,11 +66,21 @@ _RUNTIME_DIGEST = "d" * 64
 _SHA256_HEX_LENGTH = 64
 _WORKER_INPUT_FAILURE_CODE = 2
 _CASE_COUNT = 300
+_RUN_COUNT = 4 * _CASE_COUNT
 _EXPECTED_PUBLIC_VOCABULARY_DIGEST = (
     "62be02f2222129a1d72aaa5329d0f1e687f1014326e91cbbf7b5141973c651dd"
 )
 _EXPECTED_BASELINE_SET_ROOT = (
     "f8e5c3aadd426220d52d797cef178efc5aec51cd788092749cf46cf7edf53d4d"
+)
+_EXPECTED_ACTUAL_METHOD_REGISTRY_ROOT = (
+    "0e19fbc61b979dc2af8b523d4ef56620a5d552c320fc2c95a69c83d120bf0e53"
+)
+_EXPECTED_ACTUAL_RUN_ROOT = (
+    "b09c3f26e1bdae8d3a61f0e8f17228af2af573e4a214c19508c24f062f62fdba"
+)
+_EXPECTED_ACTUAL_CLAIM_SET_ROOT = (
+    "baf40ff2b84008130dc1644adfe07e988bdb6d9b6075309df0e71a2a35513692"
 )
 _EXPECTED_BUNDLE_ROOTS = {
     BuiltinBaseline.ALWAYS_UNKNOWN: (
@@ -735,6 +750,9 @@ def test_actual_workspace100_matrix_matches_the_frozen_construction_expectations
             {"unknown": 200, "environment": 50, "policy": 50}
         ),
     }
+    limits = WorkerLimits()
+    all_records: list[WorkerRunRecord] = []
+    backend_digests: set[str] = set()
 
     for bundle_index, artifact in enumerate(parsed_baseline_set.bundles):
         bundle = artifact.bundle
@@ -762,6 +780,7 @@ def test_actual_workspace100_matrix_matches_the_frozen_construction_expectations
                 bundle.worker_program,
                 case.envelope,
                 backend=backend,
+                limits=limits,
             )
 
             assert record.status is WorkerRunStatus.CLAIMED
@@ -772,6 +791,8 @@ def test_actual_workspace100_matrix_matches_the_frozen_construction_expectations
             )
             counts[_claim_category(record.claim)] += 1
             run_digests[case.evidence_digest] = record.run_digest
+            all_records.append(record)
+            backend_digests.add(record.backend_implementation_digest)
 
         assert len(run_digests) == _CASE_COUNT
         assert counts == expected_counts[bundle.baseline]
@@ -780,5 +801,46 @@ def test_actual_workspace100_matrix_matches_the_frozen_construction_expectations
                 bundle.worker_program,
                 case.envelope,
                 backend=backend,
+                limits=limits,
             )
             assert repeated.run_digest == run_digests[case.evidence_digest]
+
+    assert len(all_records) == _RUN_COUNT
+    assert (
+        len(
+            {
+                (record.method_id, record.evidence_digest)
+                for record in all_records
+            }
+        )
+        == _RUN_COUNT
+    )
+    assert len(backend_digests) == 1
+    backend_implementation_digest = next(iter(backend_digests))
+
+    claim_set = build_workspace100_claim_set(
+        evidence_views,
+        parsed_baseline_set,
+        tuple(reversed(all_records)),
+        backend_implementation_digest=backend_implementation_digest,
+        limits=limits,
+    )
+    payload = claim_set.to_canonical_bytes()
+    parsed_claim_set = load_verified_workspace100_claim_set(
+        payload,
+        evidence_views,
+        parsed_baseline_set,
+        expected_backend_implementation_digest=(
+            backend_implementation_digest
+        ),
+        expected_limits=limits,
+    )
+
+    assert parsed_claim_set == claim_set
+    assert parsed_claim_set.to_canonical_bytes() == payload
+    assert (
+        claim_set.method_registry_root
+        == _EXPECTED_ACTUAL_METHOD_REGISTRY_ROOT
+    )
+    assert claim_set.run_root == _EXPECTED_ACTUAL_RUN_ROOT
+    assert claim_set.claim_set_root == _EXPECTED_ACTUAL_CLAIM_SET_ROOT

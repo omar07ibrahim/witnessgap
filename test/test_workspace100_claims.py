@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from dataclasses import replace
 from typing import cast
 
@@ -17,7 +19,10 @@ from witnessgap.workspace100.baselines import (
 from witnessgap.workspace100.claims import (
     Workspace100ClaimRun,
     Workspace100ClaimSet,
+    Workspace100ExecutionPlan,
+    Workspace100RunKey,
     build_workspace100_claim_set,
+    evaluate_workspace100_baselines,
     load_verified_workspace100_claim_set,
     verify_workspace100_claim_bindings,
 )
@@ -28,7 +33,12 @@ from witnessgap.workspace100.views import (
     build_workspace100_evidence_views,
 )
 from witnessgap.workspace100.worker import (
+    RawWorkerExit,
+    WorkerBackend,
+    WorkerExitKind,
     WorkerFailureKind,
+    WorkerHarnessError,
+    WorkerHarnessErrorKind,
     WorkerLimits,
     WorkerRunRecord,
     WorkerRunStatus,
@@ -53,6 +63,52 @@ _UNKNOWN_CLAIM = ParticipantClaim(
     kind=VerdictKind.NOT_IDENTIFIABLE,
     unknown_reason=UnknownReason.AMBIGUOUS_WORLDS,
 )
+
+
+class _RecordingBackend:
+    def __init__(
+        self,
+        program_digest: str,
+        *,
+        backend_digest: str = _BACKEND_DIGEST,
+    ) -> None:
+        self._program_digest = program_digest
+        self._backend_digest = backend_digest
+        self._harness_error: WorkerHarnessErrorKind | None = None
+        self._change_identity_after_invoke = False
+        self._change_program_after_invoke = False
+        self._time_out_first_invoke = False
+        self.requests: list[tuple[bytes, WorkerLimits]] = []
+
+    @property
+    def program_implementation_digest(self) -> str:
+        return self._program_digest
+
+    @property
+    def implementation_digest(self) -> str:
+        return self._backend_digest
+
+    def invoke(self, request: bytes, *, limits: WorkerLimits) -> RawWorkerExit:
+        self.requests.append((request, limits))
+        if self._harness_error is not None:
+            raise WorkerHarnessError(self._harness_error)
+        if self._time_out_first_invoke and len(self.requests) == 1:
+            return RawWorkerExit(
+                kind=WorkerExitKind.TIMED_OUT,
+                returncode=-1,
+                stdout=b"",
+                stderr=b"",
+            )
+        if self._change_identity_after_invoke:
+            self._backend_digest = "b" * 64
+        if self._change_program_after_invoke:
+            self._program_digest = "c" * 64
+        return RawWorkerExit(
+            kind=WorkerExitKind.EXITED,
+            returncode=0,
+            stdout=_UNKNOWN_CLAIM.to_canonical_bytes(),
+            stderr=b"",
+        )
 
 
 @pytest.fixture(scope="module")
@@ -110,6 +166,47 @@ def claim_set(
     )
 
 
+def _execution_order(
+    evidence_views: Workspace100EvidenceViews,
+    baseline_set: BuiltinBaselineSet,
+) -> tuple[Workspace100RunKey, ...]:
+    return tuple(
+        Workspace100RunKey(
+            method_id=artifact.bundle.method_id,
+            evidence_digest=case.evidence_digest,
+        )
+        for artifact in baseline_set.bundles
+        for case in evidence_views.cases
+    )
+
+
+def _recording_backends(
+    baseline_set: BuiltinBaselineSet,
+) -> tuple[WorkerBackend, ...]:
+    return cast(
+        tuple[WorkerBackend, ...],
+        tuple(
+            _RecordingBackend(
+                artifact.bundle.program_implementation_digest,
+            )
+            for artifact in baseline_set.bundles
+        ),
+    )
+
+
+def _execution_plan(
+    backends: tuple[WorkerBackend, ...],
+    limits: WorkerLimits,
+    *,
+    backend_digest: str = _BACKEND_DIGEST,
+) -> Workspace100ExecutionPlan:
+    return Workspace100ExecutionPlan(
+        backends=backends,
+        expected_backend_implementation_digest=backend_digest,
+        limits=limits,
+    )
+
+
 def test_claim_set_is_closed_complete_and_root_pinned(
     claim_set: Workspace100ClaimSet,
     evidence_views: Workspace100EvidenceViews,
@@ -138,6 +235,298 @@ def test_claim_set_is_closed_complete_and_root_pinned(
     )
     assert "Workspace100ClaimSet" not in workspace100.__all__
     assert not hasattr(workspace100, "build_workspace100_claim_set")
+
+
+def test_canonical_evaluation_matches_when_per_key_outcomes_match(
+    claim_set: Workspace100ClaimSet,
+    evidence_views: Workspace100EvidenceViews,
+    baseline_set: BuiltinBaselineSet,
+    limits: WorkerLimits,
+) -> None:
+    order = _execution_order(evidence_views, baseline_set)
+    forward_backends = _recording_backends(baseline_set)
+    reverse_backends = _recording_backends(baseline_set)
+
+    forward = evaluate_workspace100_baselines(
+        evidence_views,
+        baseline_set,
+        execution=_execution_plan(forward_backends, limits),
+        execution_order=order,
+    )
+    reverse = evaluate_workspace100_baselines(
+        evidence_views,
+        baseline_set,
+        execution=_execution_plan(reverse_backends, limits),
+        execution_order=tuple(reversed(order)),
+    )
+
+    assert forward.to_canonical_bytes() == claim_set.to_canonical_bytes()
+    assert reverse.to_canonical_bytes() == forward.to_canonical_bytes()
+    expected_requests = tuple(
+        (case.envelope.to_canonical_bytes(), limits)
+        for case in evidence_views.cases
+    )
+    for forward_backend, reverse_backend in zip(
+        forward_backends,
+        reverse_backends,
+        strict=True,
+    ):
+        assert isinstance(forward_backend, _RecordingBackend)
+        assert isinstance(reverse_backend, _RecordingBackend)
+        assert tuple(forward_backend.requests) == expected_requests
+        assert tuple(reverse_backend.requests) == tuple(
+            reversed(expected_requests)
+        )
+
+
+def test_evaluator_rejects_invalid_schedule_before_invocation(
+    evidence_views: Workspace100EvidenceViews,
+    baseline_set: BuiltinBaselineSet,
+    limits: WorkerLimits,
+) -> None:
+    order = _execution_order(evidence_views, baseline_set)
+
+    backends = _recording_backends(baseline_set)
+    with pytest.raises(TypeError, match="1,200"):
+        evaluate_workspace100_baselines(
+            evidence_views,
+            baseline_set,
+            execution=_execution_plan(backends, limits),
+            execution_order=order[:-1],
+        )
+    assert all(
+        isinstance(backend, _RecordingBackend) and not backend.requests
+        for backend in backends
+    )
+
+    backends = _recording_backends(baseline_set)
+    with pytest.raises(ValueError, match="duplicate"):
+        evaluate_workspace100_baselines(
+            evidence_views,
+            baseline_set,
+            execution=_execution_plan(backends, limits),
+            execution_order=(*order[:-1], order[0]),
+        )
+    assert all(
+        isinstance(backend, _RecordingBackend) and not backend.requests
+        for backend in backends
+    )
+
+    backends = _recording_backends(baseline_set)
+    foreign = Workspace100RunKey(
+        method_id="foreign_method",
+        evidence_digest=order[-1].evidence_digest,
+    )
+    with pytest.raises(ValueError, match="exact baseline/case product"):
+        evaluate_workspace100_baselines(
+            evidence_views,
+            baseline_set,
+            execution=_execution_plan(backends, limits),
+            execution_order=(*order[:-1], foreign),
+        )
+    assert all(
+        isinstance(backend, _RecordingBackend) and not backend.requests
+        for backend in backends
+    )
+
+
+def test_evaluator_pins_program_and_backend_identity_before_invocation(
+    evidence_views: Workspace100EvidenceViews,
+    baseline_set: BuiltinBaselineSet,
+    limits: WorkerLimits,
+) -> None:
+    order = _execution_order(evidence_views, baseline_set)
+    wrong_program = list(_recording_backends(baseline_set))
+    assert isinstance(wrong_program[0], _RecordingBackend)
+    wrong_program[0]._program_digest = "f" * 64
+
+    with pytest.raises(ValueError, match="contradicts its baseline program"):
+        evaluate_workspace100_baselines(
+            evidence_views,
+            baseline_set,
+            execution=_execution_plan(tuple(wrong_program), limits),
+            execution_order=order,
+        )
+    assert all(
+        isinstance(backend, _RecordingBackend) and not backend.requests
+        for backend in wrong_program
+    )
+
+    mixed_backend = list(_recording_backends(baseline_set))
+    assert isinstance(mixed_backend[-1], _RecordingBackend)
+    mixed_backend[-1]._backend_digest = "c" * 64
+
+    with pytest.raises(ValueError, match="one backend identity"):
+        evaluate_workspace100_baselines(
+            evidence_views,
+            baseline_set,
+            execution=_execution_plan(tuple(mixed_backend), limits),
+            execution_order=order,
+        )
+    assert all(
+        isinstance(backend, _RecordingBackend) and not backend.requests
+        for backend in mixed_backend
+    )
+
+    unexpected_backend = _recording_backends(baseline_set)
+    with pytest.raises(ValueError, match="expected identity"):
+        evaluate_workspace100_baselines(
+            evidence_views,
+            baseline_set,
+            execution=_execution_plan(
+                unexpected_backend,
+                limits,
+                backend_digest="d" * 64,
+            ),
+            execution_order=order,
+        )
+    assert all(
+        isinstance(backend, _RecordingBackend) and not backend.requests
+        for backend in unexpected_backend
+    )
+
+
+def test_execution_plan_rejects_malformed_backend_configuration(
+    evidence_views: Workspace100EvidenceViews,
+    baseline_set: BuiltinBaselineSet,
+    limits: WorkerLimits,
+) -> None:
+    backends = _recording_backends(baseline_set)
+
+    with pytest.raises(TypeError, match="four ordered backends"):
+        Workspace100ExecutionPlan(
+            backends=backends[:-1],
+            expected_backend_implementation_digest=_BACKEND_DIGEST,
+            limits=limits,
+        )
+    with pytest.raises(ValueError, match="lowercase SHA-256"):
+        Workspace100ExecutionPlan(
+            backends=backends,
+            expected_backend_implementation_digest="NOT-A-DIGEST",
+            limits=limits,
+        )
+
+    malformed = cast(
+        tuple[WorkerBackend, ...],
+        (*backends[:-1], object()),
+    )
+    with pytest.raises(TypeError, match="does not implement WorkerBackend"):
+        evaluate_workspace100_baselines(
+            evidence_views,
+            baseline_set,
+            execution=_execution_plan(malformed, limits),
+            execution_order=_execution_order(evidence_views, baseline_set),
+        )
+    assert all(
+        isinstance(backend, _RecordingBackend) and not backend.requests
+        for backend in backends
+    )
+
+
+@pytest.mark.parametrize(
+    "changed_identity",
+    ("backend", "program"),
+)
+def test_evaluator_aborts_when_backend_identity_changes_during_execution(
+    changed_identity: str,
+    evidence_views: Workspace100EvidenceViews,
+    baseline_set: BuiltinBaselineSet,
+    limits: WorkerLimits,
+) -> None:
+    order = _execution_order(evidence_views, baseline_set)
+    backends = list(_recording_backends(baseline_set))
+    first = backends[0]
+    assert isinstance(first, _RecordingBackend)
+    if changed_identity == "backend":
+        first._change_identity_after_invoke = True
+    else:
+        first._change_program_after_invoke = True
+
+    with pytest.raises(ValueError, match="identity changed"):
+        evaluate_workspace100_baselines(
+            evidence_views,
+            baseline_set,
+            execution=_execution_plan(tuple(backends), limits),
+            execution_order=order,
+        )
+
+    assert len(first.requests) == 1
+    assert all(
+        isinstance(backend, _RecordingBackend) and not backend.requests
+        for backend in backends[1:]
+    )
+
+
+def test_evaluator_roots_a_normalized_worker_failure(
+    evidence_views: Workspace100EvidenceViews,
+    baseline_set: BuiltinBaselineSet,
+    limits: WorkerLimits,
+) -> None:
+    order = _execution_order(evidence_views, baseline_set)
+    backends = list(_recording_backends(baseline_set))
+    first = backends[0]
+    assert isinstance(first, _RecordingBackend)
+    first._time_out_first_invoke = True
+
+    evaluated = evaluate_workspace100_baselines(
+        evidence_views,
+        baseline_set,
+        execution=_execution_plan(tuple(backends), limits),
+        execution_order=order,
+    )
+    failures = tuple(
+        run.worker_run
+        for run in evaluated.runs
+        if run.worker_run.status is WorkerRunStatus.FAILED
+    )
+
+    assert len(evaluated.runs) == _RUN_COUNT
+    assert len(failures) == 1
+    assert failures[0].failure is WorkerFailureKind.TIMED_OUT
+    assert evaluated.claim_set_root != _EXPECTED_CLAIM_SET_ROOT
+
+
+def test_evaluator_propagates_harness_fault_without_a_partial_artifact(
+    evidence_views: Workspace100EvidenceViews,
+    baseline_set: BuiltinBaselineSet,
+    limits: WorkerLimits,
+) -> None:
+    order = _execution_order(evidence_views, baseline_set)
+    backends = list(_recording_backends(baseline_set))
+    first = backends[0]
+    assert isinstance(first, _RecordingBackend)
+    first._harness_error = WorkerHarnessErrorKind.SPAWN_FAILED
+
+    with pytest.raises(WorkerHarnessError) as raised:
+        evaluate_workspace100_baselines(
+            evidence_views,
+            baseline_set,
+            execution=_execution_plan(tuple(backends), limits),
+            execution_order=order,
+        )
+
+    assert raised.value.kind is WorkerHarnessErrorKind.SPAWN_FAILED
+    assert len(first.requests) == 1
+    assert all(
+        isinstance(backend, _RecordingBackend) and not backend.requests
+        for backend in backends[1:]
+    )
+
+
+def test_claim_evaluator_import_closure_excludes_private_truth() -> None:
+    result = subprocess.run(
+        (
+            sys.executable,
+            "-c",
+            "import sys; import witnessgap.workspace100.claims; "
+            "assert 'witnessgap.workspace100.truth' not in sys.modules",
+        ),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_claim_assembly_is_independent_of_input_record_order(

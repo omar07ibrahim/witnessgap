@@ -17,19 +17,23 @@ from witnessgap.canonical import JsonValue, canonical_digest, canonical_json
 from witnessgap.workspace100.baselines import (
     BUILTIN_BASELINE_SET_ROOT,
     BuiltinBaseline,
+    BuiltinBaselineArtifact,
     BuiltinBaselineBundle,
     BuiltinBaselineSet,
     builtin_baseline_set,
 )
 from witnessgap.workspace100.records import PROTOCOL_ID
 from witnessgap.workspace100.views import (
+    PublicEvidenceCase,
     Workspace100EvidenceViews,
     Workspace100ProjectionRoots,
     workspace100_projection_roots,
 )
 from witnessgap.workspace100.worker import (
+    WorkerBackend,
     WorkerLimits,
     WorkerRunRecord,
+    run_worker_once,
     workspace100_worker_request_digest,
 )
 
@@ -220,6 +224,29 @@ class Workspace100RunKey:
     def __post_init__(self) -> None:
         _require_identifier(self.method_id, field="run key method_id")
         _require_digest(self.evidence_digest, field="run key evidence_digest")
+
+
+@dataclass(frozen=True, slots=True)
+class Workspace100ExecutionPlan:
+    """Transient ordered backends plus caller-pinned execution identity."""
+
+    backends: tuple[WorkerBackend, ...]
+    expected_backend_implementation_digest: str
+    limits: WorkerLimits
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+    def validate(self) -> None:
+        if type(self.backends) is not tuple or len(self.backends) != _METHOD_COUNT:
+            raise TypeError("execution plan requires four ordered backends")
+        _require_digest(
+            self.expected_backend_implementation_digest,
+            field="execution plan expected backend implementation_digest",
+        )
+        if type(self.limits) is not WorkerLimits:
+            raise TypeError("execution plan requires exact worker limits")
+        self.limits.validate()
 
 
 @dataclass(frozen=True, slots=True)
@@ -439,6 +466,89 @@ def load_verified_workspace100_claim_set(
     return claim_set
 
 
+def evaluate_workspace100_baselines(
+    views: Workspace100EvidenceViews,
+    baseline_set: BuiltinBaselineSet,
+    *,
+    execution: Workspace100ExecutionPlan,
+    execution_order: tuple[Workspace100RunKey, ...],
+) -> Workspace100ClaimSet:
+    """Run the exact baseline/case product under an explicit transient order.
+
+    The order is not serialized.  Backend behavior may still be stateful, so
+    schedule-independent results are a property of the selected backends.
+    """
+
+    if type(execution) is not Workspace100ExecutionPlan:
+        raise TypeError("baseline evaluation requires an exact execution plan")
+    execution.validate()
+    expected_execution = _ExpectedExecution(
+        backend_implementation_digest=(
+            execution.expected_backend_implementation_digest
+        ),
+        limits=execution.limits,
+    )
+    _validate_claim_inputs(views, baseline_set, execution.limits)
+    normalized_order = _validate_execution_order(
+        execution_order,
+        views,
+        baseline_set,
+    )
+    backend_digest, backends_by_method = _pin_execution_backends(
+        execution.backends,
+        baseline_set,
+        expected_backend_digest=(
+            expected_execution.backend_implementation_digest
+        ),
+    )
+    artifacts_by_method = {
+        artifact.bundle.method_id: artifact for artifact in baseline_set.bundles
+    }
+    cases_by_evidence = {
+        case.evidence_digest: case for case in views.cases
+    }
+    records: list[WorkerRunRecord] = []
+    for key in normalized_order:
+        artifact = artifacts_by_method[key.method_id]
+        backend = backends_by_method[key.method_id]
+        case = cases_by_evidence[key.evidence_digest]
+        _recheck_backend_identity(
+            backend,
+            expected_program_digest=(
+                artifact.bundle.program_implementation_digest
+            ),
+            expected_backend_digest=backend_digest,
+        )
+        record = run_worker_once(
+            artifact.bundle.worker_program,
+            case.envelope,
+            backend=backend,
+            limits=execution.limits,
+        )
+        _recheck_backend_identity(
+            backend,
+            expected_program_digest=(
+                artifact.bundle.program_implementation_digest
+            ),
+            expected_backend_digest=backend_digest,
+        )
+        _verify_evaluated_record(
+            record,
+            key=key,
+            artifact=artifact,
+            case=case,
+            expected_execution=expected_execution,
+        )
+        records.append(record)
+    return build_workspace100_claim_set(
+        views,
+        baseline_set,
+        tuple(records),
+        backend_implementation_digest=backend_digest,
+        limits=execution.limits,
+    )
+
+
 def verify_workspace100_claim_bindings(
     claim_set: Workspace100ClaimSet,
     views: Workspace100EvidenceViews,
@@ -525,6 +635,133 @@ def _verify_workspace100_claim_bindings(
     for method in claim_set.methods:
         if frozenset(evidence_by_method[method.method_digest]) != expected_evidence:
             raise ValueError("claim method does not cover the public evidence set")
+
+
+def _validate_execution_order(
+    execution_order: tuple[Workspace100RunKey, ...],
+    views: Workspace100EvidenceViews,
+    baseline_set: BuiltinBaselineSet,
+) -> tuple[Workspace100RunKey, ...]:
+    if (
+        type(execution_order) is not tuple
+        or len(execution_order) != _RUN_COUNT
+        or any(type(key) is not Workspace100RunKey for key in execution_order)
+    ):
+        raise TypeError("execution order must contain 1,200 exact run keys")
+    supplied = tuple(
+        (key.method_id, key.evidence_digest) for key in execution_order
+    )
+    if len(set(supplied)) != _RUN_COUNT:
+        raise ValueError("execution order contains duplicate run keys")
+    evidence_digests = tuple(case.evidence_digest for case in views.cases)
+    if len(evidence_digests) != _CASE_COUNT or len(
+        set(evidence_digests)
+    ) != _CASE_COUNT:
+        raise ValueError("execution order evidence source is not 300 unique cases")
+    expected = {
+        (artifact.bundle.method_id, evidence_digest)
+        for artifact in baseline_set.bundles
+        for evidence_digest in evidence_digests
+    }
+    if set(supplied) != expected:
+        raise ValueError("execution order is not the exact baseline/case product")
+    return tuple(
+        Workspace100RunKey(
+            method_id=key.method_id,
+            evidence_digest=key.evidence_digest,
+        )
+        for key in execution_order
+    )
+
+
+def _pin_execution_backends(
+    backends: tuple[WorkerBackend, ...],
+    baseline_set: BuiltinBaselineSet,
+    *,
+    expected_backend_digest: str,
+) -> tuple[str, dict[str, WorkerBackend]]:
+    _require_digest(
+        expected_backend_digest,
+        field="expected execution backend implementation_digest",
+    )
+    if type(backends) is not tuple or len(backends) != _METHOD_COUNT:
+        raise TypeError("baseline execution requires four ordered backends")
+    backend_digests: list[str] = []
+    backends_by_method: dict[str, WorkerBackend] = {}
+    for artifact, backend in zip(
+        baseline_set.bundles,
+        backends,
+        strict=True,
+    ):
+        try:
+            program_digest = backend.program_implementation_digest
+            backend_digest = backend.implementation_digest
+        except AttributeError as error:
+            raise TypeError(
+                "execution plan backend does not implement WorkerBackend"
+            ) from error
+        _require_digest(
+            program_digest,
+            field="execution backend program_implementation_digest",
+        )
+        _require_digest(
+            backend_digest,
+            field="execution backend implementation_digest",
+        )
+        if program_digest != artifact.bundle.program_implementation_digest:
+            raise ValueError("execution backend contradicts its baseline program")
+        backend_digests.append(backend_digest)
+        backends_by_method[artifact.bundle.method_id] = backend
+    if len(set(backend_digests)) != 1:
+        raise ValueError("baseline execution requires one backend identity")
+    if backend_digests[0] != expected_backend_digest:
+        raise ValueError("execution backend contradicts its expected identity")
+    return backend_digests[0], backends_by_method
+
+
+def _recheck_backend_identity(
+    backend: WorkerBackend,
+    *,
+    expected_program_digest: str,
+    expected_backend_digest: str,
+) -> None:
+    if (
+        backend.program_implementation_digest != expected_program_digest
+        or backend.implementation_digest != expected_backend_digest
+    ):
+        raise ValueError("execution backend identity changed during evaluation")
+
+
+def _verify_evaluated_record(
+    record: WorkerRunRecord,
+    *,
+    key: Workspace100RunKey,
+    artifact: BuiltinBaselineArtifact,
+    case: PublicEvidenceCase,
+    expected_execution: _ExpectedExecution,
+) -> None:
+    if type(record) is not WorkerRunRecord:
+        raise TypeError("evaluation returned a non-exact worker record")
+    if type(artifact) is not BuiltinBaselineArtifact:
+        raise TypeError("evaluation baseline artifact is not exact")
+    if type(case) is not PublicEvidenceCase:
+        raise TypeError("evaluation evidence case is not exact")
+    if (
+        record.method_id,
+        record.implementation_digest,
+        record.backend_implementation_digest,
+        record.limits_digest,
+        record.evidence_digest,
+        record.request_digest,
+    ) != (
+        key.method_id,
+        artifact.bundle.program_implementation_digest,
+        expected_execution.backend_implementation_digest,
+        expected_execution.limits.digest,
+        case.evidence_digest,
+        workspace100_worker_request_digest(case.envelope),
+    ):
+        raise ValueError("worker record contradicts its evaluation request")
 
 
 def _validate_claim_set_header(claim_set: Workspace100ClaimSet) -> None:
