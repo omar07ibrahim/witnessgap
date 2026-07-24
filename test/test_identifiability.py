@@ -13,6 +13,7 @@ from witnessgap.identifiability import (
     VerdictKind,
 )
 from witnessgap.model import InterventionAtom, Outcome, ReplayResult
+from witnessgap.oracle import enumerate_repair_panel
 from witnessgap.worlds.workspace import workspace_twins
 
 
@@ -27,6 +28,23 @@ def test_workspace_twins_force_unknown_from_the_trace_alone() -> None:
     assert verdict.ambiguity is not None
     assert verdict.ambiguity.left_target_family == (("environment",),)
     assert verdict.ambiguity.right_target_family == (("policy",),)
+
+
+def test_workspace_twins_replay_the_same_failure_but_different_repairs() -> None:
+    environment, policy = workspace_twins()
+    environment_panel = enumerate_repair_panel(environment)
+    policy_panel = enumerate_repair_panel(policy)
+
+    assert (
+        environment_panel.receipt_for(()).result.public_trace
+        == policy_panel.receipt_for(()).result.public_trace
+    )
+    assert environment_panel.receipt_for(("refresh_draft_store",)).result.outcome is Outcome.SUCCESS
+    assert (
+        environment_panel.receipt_for(("repair_draft_selection",)).result.outcome is Outcome.FAILURE
+    )
+    assert policy_panel.receipt_for(("refresh_draft_store",)).result.outcome is Outcome.FAILURE
+    assert policy_panel.receipt_for(("repair_draft_selection",)).result.outcome is Outcome.SUCCESS
 
 
 @pytest.mark.parametrize(

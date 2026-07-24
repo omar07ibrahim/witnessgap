@@ -19,6 +19,19 @@ _ATOMS = (
     InterventionAtom(name="repair_draft_selection", target="policy"),
 )
 _PROBES = ("draft_store_epoch", "workspace_owner")
+_APPROVED_REVISION = "release-notes-v21"
+_PREVIOUS_REVISION = "release-notes-v17"
+
+
+@dataclass(frozen=True, slots=True)
+class _WorkspaceState:
+    approved_pointer: str
+    selected_pointer: str
+
+    def selected_revision(self) -> str:
+        if self.selected_pointer == "approved":
+            return self.approved_pointer
+        return self.selected_pointer
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,7 +54,11 @@ class WorkspaceWorld:
 
     def probe(self, name: str) -> bytes:
         if name == "draft_store_epoch":
-            value = "stale" if self.cause is WorkspaceCause.ENVIRONMENT else "current"
+            value = (
+                "stale"
+                if self._initial_state().approved_pointer == _PREVIOUS_REVISION
+                else "current"
+            )
         elif name == "workspace_owner":
             value = "release_team"
         else:
@@ -53,12 +70,20 @@ class WorkspaceWorld:
         if unknown := interventions - known:
             raise ValueError(f"unknown interventions: {sorted(unknown)!r}")
 
-        if self.cause is WorkspaceCause.ENVIRONMENT:
-            repaired = "refresh_draft_store" in interventions
-        else:
-            repaired = "repair_draft_selection" in interventions
+        state = self._initial_state()
+        if "refresh_draft_store" in interventions:
+            state = _WorkspaceState(
+                approved_pointer=_APPROVED_REVISION,
+                selected_pointer=state.selected_pointer,
+            )
+        if "repair_draft_selection" in interventions:
+            state = _WorkspaceState(
+                approved_pointer=state.approved_pointer,
+                selected_pointer="approved",
+            )
 
-        document = "release-notes-v21" if repaired else "release-notes-v17"
+        document = state.selected_revision()
+        approved = document == _APPROVED_REVISION
         trace = canonical_json(
             {
                 "events": [
@@ -75,13 +100,24 @@ class WorkspaceWorld:
                 ],
                 "interventions": sorted(interventions),
                 "task": "Publish the approved Northstar release notes.",
-                "terminal": "approved_content_present" if repaired else "approved_content_missing",
+                "terminal": "approved_content_present" if approved else "approved_content_missing",
             }
         )
         return ReplayResult(
             public_trace=trace,
-            outcome=Outcome.SUCCESS if repaired else Outcome.FAILURE,
+            outcome=Outcome.SUCCESS if approved else Outcome.FAILURE,
             state_reads=("draft_store_epoch", "policy_selection"),
+        )
+
+    def _initial_state(self) -> _WorkspaceState:
+        if self.cause is WorkspaceCause.ENVIRONMENT:
+            return _WorkspaceState(
+                approved_pointer=_PREVIOUS_REVISION,
+                selected_pointer="approved",
+            )
+        return _WorkspaceState(
+            approved_pointer=_APPROVED_REVISION,
+            selected_pointer=_PREVIOUS_REVISION,
         )
 
 
