@@ -33,6 +33,7 @@ from witnessgap.workspace100.worker import (
     WorkerProgram,
     WorkerRunRecord,
     WorkerRunStatus,
+    python_worker_program_digest,
     run_worker_once,
 )
 from witnessgap.worlds.workspace import workspace_twins
@@ -41,7 +42,7 @@ _DIGEST_A = "a" * 64
 _DIGEST_B = "b" * 64
 _SHA256_HEX_LENGTH = 64
 _EXPECTED_WORKER_IMPLEMENTATION_DIGEST = (
-    "4c4a555930de0290d61d9924d0b3dd391544aebebf709b5de152dabd3e4a13f6"
+    "27fc8a9c48cd011ff6547ea2c2e9b889421d2e3742c4fff5e4470e90abc8ccc9"
 )
 _EXPECTED_STANDALONE_RUN_DIGEST = (
     "ace50175c3bdfb36a7a9af1000022e0d80b003d694a62a3c92422211e79aa635"
@@ -238,6 +239,7 @@ def test_local_worker_stages_source_and_accepts_one_canonical_claim(
     assert record.backend_implementation_digest == backend.implementation_digest
     assert record.evidence_digest == envelope.evidence_digest
     assert len(record.request_digest) == _SHA256_HEX_LENGTH
+    assert program.implementation_digest == python_worker_program_digest(source)
 
 
 @pytest.mark.parametrize(

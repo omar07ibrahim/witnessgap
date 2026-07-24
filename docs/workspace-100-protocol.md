@@ -5,10 +5,11 @@ Protocol ID: `workspace-100-v1`
 Status: frozen protocol with an implemented authored catalog, in-memory
 sealed-source generator, trusted runtime adapter, closed participant wire, and
 verified evidence-view projection, evaluator truth certificates, and a
-fresh-process transport for trusted built-in methods. No materialized release
-directory, third-party-code isolation backend, evaluated 300-case claim set, or
-benchmark result exists yet. A change to size, evidence views, scoring grain,
-metric formulas, or semantic contracts requires a new protocol ID.
+fresh-process transport with four pinned trusted baseline bundles. No
+materialized release directory, third-party-code isolation backend, evaluated
+300-case claim set, or benchmark result exists yet. A change to size, evidence
+views, scoring grain, metric formulas, or semantic contracts requires a new
+protocol ID.
 
 Workspace-100 is the Stage B engineering slice for WitnessGap. It tests two
 claims inside one synthetic, finite family:
@@ -258,23 +259,40 @@ floor.
 
 ### `forced_environment`
 
-Always returns `identified_singleton(environment)`. The balanced twin
-construction gives 50% latent target accuracy but 100% false certainty on
-ambiguous views.
+Always returns `identified_singleton(environment)` with the template's public
+refresh witness. The balanced twin construction is expected to give 50%
+target/witness exactness on identifiable cases and false certainty on every
+ambiguous case; these are not published metrics until the evaluator exists.
 
 ### `refresh_success_only`
 
 Returns `environment` only when the refresh receipt succeeds; otherwise
-returns `not_identifiable`. Expected decisive coverage is 50% with zero
-incorrect decisive verdicts on `refresh_receipt`.
+returns `not_identifiable`. Its construction expectation is 50/100 decisive
+claims on `refresh_receipt`, or 50/300 overall.
 
 ### `refresh_outcome`
 
 Returns `environment` on refresh success and `policy` on refresh failure.
-Expected decisive coverage is 100% on `refresh_receipt`.
+The failure branch submits the mapped policy repair witness, not the observed
+refresh atom. Its construction expectation is 100/100 decisive claims on
+`refresh_receipt`, or 100/300 overall.
 
-The verifier-derived method is reported separately from these baselines. No
-LLM judge or learned model is part of Workspace-100.
+All four implementations are pinned standalone source bundles. The policy
+repair atom is not present on the wire, so the narrow tool-to-witness mapping
+is explicitly declared public protocol knowledge in
+[the baseline bundle contract](baseline-bundles.md). The verifier-derived
+method is reported separately from these baselines. No LLM judge or learned
+model is part of Workspace-100.
+
+The vocabulary digest
+`62be02f2222129a1d72aaa5329d0f1e687f1014326e91cbbf7b5141973c651dd`
+and baseline-set root
+`f8e5c3aadd426220d52d797cef178efc5aec51cd788092749cf46cf7edf53d4d`
+complete the v1 participant contract. No result or release preceded this
+declaration. A later vocabulary or membership change requires a new protocol
+ID rather than silently revising `workspace-100-v1`. Here membership means the
+exact ordered `(method_id, program_implementation_digest)` pairs; changing
+source bytes or either identity also requires a new protocol ID.
 
 ## 8. Metrics
 
@@ -355,6 +373,7 @@ The deterministic release layout is:
 ```text
 workspace100/v1/
   protocol.json
+  baselines/baseline-set.json
   authored/templates.json
   authored/variants.json
   sealed/sources.jsonl
@@ -366,6 +385,15 @@ workspace100/v1/
   results/report.json
   release-manifest.json
 ```
+
+`protocol.json` carries the closed `public_baseline_vocabulary` payload and
+its digest. Its canonical vocabulary encoding and digest must be byte-for-byte
+and digest-for-digest identical to the corresponding baseline-set fields. The
+latter is self-contained: its four ordered artifacts carry the exact source
+bytes as lowercase hex, per-program identities, and bundle roots. The trusted
+evaluator parses the set and stages those decoded bytes. The participant
+process receives only that staged source plus one evidence envelope; the
+authoring package is neither installed nor mounted in the child.
 
 `sealed`, `verified`, and `truth` are never mounted into the participant
 worker. They may be published after evaluation for reproducibility; this
@@ -392,8 +420,8 @@ Generation is rejected unless all gates pass:
    capability and is covered by the declared manifest;
 10. search and independent verifier profiles agree on all episodes;
 11. no participant-visible ID contains a target or completion-side label;
-12. two clean generations have identical registry, evidence, panel, truth, and
-    report roots;
+12. two clean generations have identical public-vocabulary, baseline-set,
+    registry, evidence, panel, truth, and report roots;
 13. exactly 300 unique evidence digests are scored with the 50/50/100/100
     per-view denominators;
 14. recursive case-folded leak scanning finds no target/side label in any
@@ -402,8 +430,14 @@ Generation is rejected unless all gates pass:
     evidence references only verified receipts;
 16. a worker isolation test proves participant code cannot import or read
     sealed sources and labels;
-17. the release manifest pins protocol, source, registry, panel, evidence,
-    truth, claim, report, adapter, verifier, and trust-anchor roots.
+17. the release manifest pins protocol, public-vocabulary, baseline-set,
+    source, registry, panel, evidence, truth, claim, report, adapter, verifier,
+    worker, backend, runtime, and trust-anchor roots;
+18. the claim-set method registry contains each of the four pinned
+    `(method_id, program_implementation_digest)` pairs exactly once, every run
+    references one registry identity, each identity has exactly 300 unique
+    evidence runs, and the closed claim set and report bind the aggregate
+    baseline-set root.
 
 Expected view-level assertions:
 

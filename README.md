@@ -143,17 +143,31 @@ workers retain the host filesystem, UID, network, and external shared-state
 capabilities, so arbitrary participant code still requires a separately
 pinned OS-level isolation backend before release gate 16 can pass.
 
+Four deterministic controls now run as pinned standalone bundles:
+`always_unknown`, `forced_environment`, `refresh_success_only`, and
+`refresh_outcome`. Their child sources import only `json` and `sys`, ignore
+digest fingerprints and incidental trace values, and use a documented
+five-entry public tool-to-witness vocabulary. One self-contained canonical
+baseline set publishes exact bytes for all four standalone programs and binds
+their ordered bundle roots under aggregate root
+`f8e5c3aadd426220d52d797cef178efc5aec51cd788092749cf46cf7edf53d4d`.
+The complete 4×300 construction matrix is exercised through 1,200 fresh
+worker processes, but it is not presented as a benchmark score before the
+evaluator and report roots exist.
+
 This is verified in-memory evidence and truth construction, not a benchmark
-result. The next engineering slice is deterministic baseline bundles and a
-300-case evaluator, followed by exact metrics, a seed-provenance release
-record, and the external isolation conformance backend. Participant code must
-not receive the full WitnessGap package because it contains the authored
-catalog, sealed-source generator, and evaluator truth implementation.
+result. The next engineering slice is a case-order-independent 300-case
+evaluator and closed claim set, followed by exact metrics, a seed-provenance
+release record, and the external isolation conformance backend. Participant
+code must not receive the full WitnessGap package because it contains the
+authored catalog, sealed-source generator, and evaluator truth implementation.
 
 See [the attribution contract](docs/attribution-contract.md) for the current
 formal boundary, [the threat model](docs/threat-model.md) for the trusted
 computing base, [the worker boundary](docs/worker-boundary.md) for the
-one-record transport and remaining isolation contract, and
+one-record transport and remaining isolation contract,
+[the baseline bundle contract](docs/baseline-bundles.md) for the public
+method vocabulary, and
 [Workspace-100 protocol](docs/workspace-100-protocol.md) for the frozen Stage B
 slice.
 
