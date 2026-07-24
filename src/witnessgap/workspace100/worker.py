@@ -37,6 +37,7 @@ WORKER_RUN_FORMAT = "witnessgap.workspace100-worker-run.v1"
 
 _WORKER_REQUEST_DOMAIN = "witnessgap.workspace100-worker-request.v1"
 _PYTHON_PROGRAM_DOMAIN = "witnessgap.workspace100-python-program.v1"
+_LOCAL_PYTHON_BACKEND_DOMAIN = "witnessgap.workspace100-local-python-backend.v1"
 _WORKER_IMPLEMENTATION_DOMAIN = "witnessgap.workspace100-worker-implementation.v1"
 _MAX_REQUEST_BYTES = 1 << 18
 _MAX_CLAIM_BYTES = 1 << 14
@@ -48,6 +49,20 @@ _IO_CHUNK_BYTES = 1 << 14
 _REAP_TIMEOUT_SECONDS = 1.0
 _SHA256_HEX_LENGTH = 64
 _IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]{0,95}$")
+_WORKER_IMPLEMENTATION_PATHS = (
+    "__init__.py",
+    "canonical.py",
+    "identifiability.py",
+    "model.py",
+    "source.py",
+    "workspace100/__init__.py",
+    "workspace100/catalog.py",
+    "workspace100/evidence.py",
+    "workspace100/generation.py",
+    "workspace100/records.py",
+    "workspace100/runtime.py",
+    "workspace100/worker.py",
+)
 
 
 class WorkerExitKind(StrEnum):
@@ -197,20 +212,24 @@ class LocalPythonProcessBackend:
     """Stage and run one trusted stdlib-only Python program per invocation.
 
     ``program_source`` is copied into a fresh private directory before launch,
-    so the argv does not disclose a repository or package path.  Isolated mode
-    and ``-S`` remove environment and site-package import paths.  They do not
-    stop the program from deliberately reading host paths or using the network.
+    so no repository source path is used as the script argument.  Safe-path and
+    site-disabled flags remove ambient import paths.  They do not stop the
+    program from deliberately reading host paths or using the network.
     """
 
     program_source: bytes
+    runtime_digest: str
     interpreter: str = sys.executable
     scratch_root: str | None = None
 
     def __post_init__(self) -> None:
+        if os.name != "posix":
+            raise RuntimeError("local Python worker backend requires POSIX process groups")
         if type(self.program_source) is not bytes:
             raise TypeError("worker program_source must be exact bytes")
         if not self.program_source or len(self.program_source) > _MAX_PROGRAM_BYTES:
             raise ValueError("worker program_source exceeds its byte bounds")
+        _require_digest(self.runtime_digest, field="worker runtime_digest")
         if type(self.interpreter) is not str:
             raise TypeError("worker interpreter must be an exact string")
         if (
@@ -235,7 +254,26 @@ class LocalPythonProcessBackend:
 
     @property
     def implementation_digest(self) -> str:
-        return workspace100_worker_implementation_digest()
+        return canonical_digest(
+            _LOCAL_PYTHON_BACKEND_DOMAIN,
+            {
+                "environment_contract": "closed-v1",
+                "format": "witnessgap.workspace100-local-python-backend.v1",
+                "harness_implementation_digest": (
+                    workspace100_worker_implementation_digest()
+                ),
+                "launcher": (
+                    "python",
+                    "-s",
+                    "-S",
+                    "-B",
+                    "-P",
+                    "participant.py",
+                ),
+                "protocol_id": PROTOCOL_ID,
+                "runtime_digest": self.runtime_digest,
+            },
+        )
 
     def invoke(self, request: bytes, *, limits: WorkerLimits) -> RawWorkerExit:
         if type(request) is not bytes:
@@ -286,7 +324,14 @@ class LocalPythonProcessBackend:
         }
         try:
             process = subprocess.Popen(
-                (self.interpreter, "-I", "-S", "-B", "participant.py"),
+                (
+                    self.interpreter,
+                    "-s",
+                    "-S",
+                    "-B",
+                    "-P",
+                    "participant.py",
+                ),
                 cwd=workdir,
                 env=environment,
                 shell=False,
@@ -513,15 +558,7 @@ def workspace100_worker_implementation_digest() -> str:
 
     return package_implementation_digest(
         _WORKER_IMPLEMENTATION_DOMAIN,
-        (
-            "canonical.py",
-            "identifiability.py",
-            "model.py",
-            "source.py",
-            "workspace100/evidence.py",
-            "workspace100/records.py",
-            "workspace100/worker.py",
-        ),
+        _WORKER_IMPLEMENTATION_PATHS,
     )
 
 
@@ -678,6 +715,7 @@ def _completed_process_exit(
             )
         except subprocess.TimeoutExpired:
             return None
+    _signal_process_group(process, signal.SIGKILL)
     return RawWorkerExit(
         kind=WorkerExitKind.EXITED,
         returncode=returncode,
@@ -732,6 +770,8 @@ def _write_worker_request(
             fd,
             request[state.request_offset : state.request_offset + _IO_CHUNK_BYTES],
         )
+    except BlockingIOError:
+        return
     except BrokenPipeError:
         _close_registered(selector, stream)
         return
@@ -750,7 +790,10 @@ def _read_worker_output(
     buffer: bytearray,
     limit: int,
 ) -> bool:
-    chunk = os.read(fd, _IO_CHUNK_BYTES)
+    try:
+        chunk = os.read(fd, _IO_CHUNK_BYTES)
+    except BlockingIOError:
+        return False
     if not chunk:
         _close_registered(selector, stream)
         return False
@@ -781,8 +824,7 @@ def _terminate_and_reap(process: subprocess.Popen[bytes]) -> int:
 
 
 def _abort_process(process: subprocess.Popen[bytes]) -> None:
-    if process.poll() is None:
-        _signal_process_group(process, signal.SIGKILL)
+    _signal_process_group(process, signal.SIGKILL)
     try:
         process.wait(timeout=_REAP_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired as error:

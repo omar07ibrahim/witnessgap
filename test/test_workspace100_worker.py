@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import inspect
+import os
+import signal
+import subprocess
 import sys
+import tempfile
+import textwrap
 import time
 from collections.abc import Iterator
 from dataclasses import replace
@@ -55,12 +60,21 @@ _ALLOWED_ENVIRONMENT = {
     "TMPDIR",
     "TZ",
 }
+_REQUIRES_LINUX_PROC = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="descendant state assertion uses Linux procfs",
+)
 
 
 @pytest.fixture(scope="module")
 def worker_scratch_root() -> Iterator[str]:
-    root = Path.cwd() / ".worker-tmp"
-    root.mkdir(mode=0o700, exist_ok=True)
+    root = Path(
+        tempfile.mkdtemp(
+            prefix=".witnessgap-worker-test-",
+            dir=Path.cwd().parent,
+        )
+    )
+    root.chmod(0o700)
     yield str(root)
     root.rmdir()
 
@@ -97,6 +111,7 @@ def _local_program(
 ) -> tuple[WorkerProgram, LocalPythonProcessBackend]:
     backend = LocalPythonProcessBackend(
         source,
+        runtime_digest=_DIGEST_B,
         interpreter=sys.executable,
         scratch_root=scratch_root,
     )
@@ -295,6 +310,7 @@ def test_local_worker_bounds_both_output_channels(
     assert record.failure is WorkerFailureKind.OUTPUT_LIMIT_EXCEEDED
 
 
+@_REQUIRES_LINUX_PROC
 def test_local_worker_times_out_and_terminates_descendant_held_pipes(
     worker_scratch_root: str,
 ) -> None:
@@ -315,16 +331,55 @@ def test_local_worker_times_out_and_terminates_descendant_held_pipes(
     )
 
     assert raw.kind is WorkerExitKind.TIMED_OUT
-    descendant_pid = int(raw.stderr)
-    descendant_status = Path(f"/proc/{descendant_pid}/stat")
+    _assert_process_stopped(int(raw.stderr))
+
+
+@_REQUIRES_LINUX_PROC
+def test_local_worker_cleans_same_group_descendants_after_success(
+    worker_scratch_root: str,
+) -> None:
+    source = _source(
+        "import subprocess\n"
+        "import sys\n"
+        "sys.stdin.buffer.read()\n"
+        "child = subprocess.Popen([sys.executable, '-c', "
+        "'import time; time.sleep(30)'], stdin=subprocess.DEVNULL, "
+        "stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
+        "sys.stderr.write(str(child.pid))\n"
+        f"sys.stdout.buffer.write({_UNKNOWN_CLAIM.to_canonical_bytes()!r})\n",
+    )
+    _, backend = _local_program(source, scratch_root=worker_scratch_root)
+
+    raw = backend.invoke(
+        _envelope().to_canonical_bytes(),
+        limits=WorkerLimits(),
+    )
+
+    assert raw.kind is WorkerExitKind.EXITED
+    assert raw.returncode == 0
+    assert raw.stdout == _UNKNOWN_CLAIM.to_canonical_bytes()
+    _assert_process_stopped(int(raw.stderr))
+
+
+def _assert_process_stopped(pid: int) -> None:
+    descendant_status = Path(f"/proc/{pid}/stat")
     deadline = time.monotonic() + 0.5
     state = ""
     while descendant_status.exists() and time.monotonic() < deadline:
-        state = descendant_status.read_text(encoding="utf-8").split(") ", 1)[1][0]
+        try:
+            status = descendant_status.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return
+        state = status.split(") ", 1)[1][0]
         if state == "Z":
             break
         time.sleep(0.01)
-    assert not descendant_status.exists() or state == "Z"
+    if descendant_status.exists() and state != "Z":
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            return
+        pytest.fail(f"worker descendant {pid} remained live")
 
 
 def test_local_worker_gets_fresh_process_directory_and_closed_environment(
@@ -363,7 +418,7 @@ def test_local_worker_gets_fresh_process_directory_and_closed_environment(
     assert not Path(second_cwd).exists()
 
 
-def test_isolated_python_flags_do_not_install_the_witnessgap_package(
+def test_safe_path_flags_do_not_install_the_witnessgap_package(
     worker_scratch_root: str,
 ) -> None:
     source = _source(
@@ -382,6 +437,27 @@ def test_isolated_python_flags_do_not_install_the_witnessgap_package(
 
     assert record.status is WorkerRunStatus.CLAIMED
     assert record.claim == _UNKNOWN_CLAIM
+
+
+def test_closed_environment_fixes_python_hash_seed(
+    worker_scratch_root: str,
+) -> None:
+    source = _source(
+        "import sys\n"
+        "sys.stdin.buffer.read()\n"
+        "values = {f'value_{index}' for index in range(30)}\n"
+        "sys.stderr.write(','.join(values))\n"
+        f"sys.stdout.buffer.write({_UNKNOWN_CLAIM.to_canonical_bytes()!r})",
+    )
+    _, backend = _local_program(source, scratch_root=worker_scratch_root)
+    request = _envelope().to_canonical_bytes()
+
+    orders = {
+        backend.invoke(request, limits=WorkerLimits()).stderr
+        for _ in range(6)
+    }
+
+    assert len(orders) == 1
 
 
 def test_run_digests_are_independent_of_invocation_order(
@@ -507,11 +583,50 @@ def test_worker_rejects_identity_mismatch_and_noncanonical_parent_values() -> No
         )
 
 
+def test_local_backend_binds_the_parent_pinned_runtime(
+    worker_scratch_root: str,
+) -> None:
+    source = _constant_claim_source()
+    first_backend = LocalPythonProcessBackend(
+        source,
+        runtime_digest=_DIGEST_A,
+        scratch_root=worker_scratch_root,
+    )
+    second_backend = LocalPythonProcessBackend(
+        source,
+        runtime_digest=_DIGEST_B,
+        scratch_root=worker_scratch_root,
+    )
+    program = WorkerProgram(
+        "runtime_bound",
+        first_backend.program_implementation_digest,
+    )
+    envelope = _envelope()
+
+    first = run_worker_once(program, envelope, backend=first_backend)
+    second = run_worker_once(program, envelope, backend=second_backend)
+
+    assert first_backend.program_implementation_digest == (
+        second_backend.program_implementation_digest
+    )
+    assert first_backend.implementation_digest != second_backend.implementation_digest
+    assert first.backend_implementation_digest != second.backend_implementation_digest
+    assert first.run_digest != second.run_digest
+    assert _DIGEST_A.encode() not in envelope.to_canonical_bytes()
+    assert _DIGEST_A.encode() not in first.to_canonical_bytes()
+    assert _DIGEST_B.encode() not in second.to_canonical_bytes()
+    with pytest.raises(ValueError, match="lowercase SHA-256"):
+        LocalPythonProcessBackend(source, runtime_digest="untrusted")
+    with pytest.raises(ValueError, match="lowercase SHA-256"):
+        LocalPythonProcessBackend(source, runtime_digest="A" * 64)
+
+
 def test_harness_faults_abort_instead_of_becoming_method_failures(
     worker_scratch_root: str,
 ) -> None:
     missing_interpreter = LocalPythonProcessBackend(
         _constant_claim_source(),
+        runtime_digest=_DIGEST_B,
         interpreter=str(Path(worker_scratch_root) / "missing-python"),
         scratch_root=worker_scratch_root,
     )
@@ -524,6 +639,7 @@ def test_harness_faults_abort_instead_of_becoming_method_failures(
 
     missing_scratch = LocalPythonProcessBackend(
         _constant_claim_source(),
+        runtime_digest=_DIGEST_B,
         interpreter=sys.executable,
         scratch_root=str(Path(worker_scratch_root) / "missing-root"),
     )
@@ -541,6 +657,40 @@ def test_worker_submodule_does_not_change_the_adapter_digest() -> None:
     assert worker_module.workspace100_worker_implementation_digest()
 
     assert workspace100_adapter_implementation_digest() == before
+
+
+def test_worker_import_closure_is_fully_digest_bound() -> None:
+    script = textwrap.dedent(
+        """
+        import importlib
+        import sys
+        from pathlib import Path
+
+        import witnessgap
+
+        worker = importlib.import_module("witnessgap.workspace100.worker")
+        package_root = Path(witnessgap.__file__).resolve().parent
+        executed = set()
+        for module in tuple(sys.modules.values()):
+            module_file = getattr(module, "__file__", None)
+            if not module_file or not module_file.endswith(".py"):
+                continue
+            try:
+                relative = Path(module_file).resolve().relative_to(package_root)
+            except ValueError:
+                continue
+            executed.add(relative.as_posix())
+        uncovered = sorted(executed - set(worker._WORKER_IMPLEMENTATION_PATHS))
+        assert not uncovered, uncovered
+        """
+    )
+
+    subprocess.run(
+        [sys.executable, "-c", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
 
 
 def test_worker_record_parser_rejects_nested_open_claim() -> None:
