@@ -118,11 +118,21 @@ routes bind every case to its registry and source snapshot, while the worker
 wire omits routing IDs, labels, other views, and unqueried receipts. Recursive
 leak checks inspect decoded byte fields as well as the JSON wrapper.
 
-This is verified in-memory evidence construction, not a benchmark result. The
-next release gate is a fresh-process capability harness, deterministic
-evaluator and truth records, and seed-provenance release record. Participant
-code must not receive the full WitnessGap package because it contains the
-authored catalog and sealed-source generator.
+Evaluator truth is now authored through a second independent replay path. It
+requires 50 caller-supplied trust anchors, verifies every sealed completion
+again, and issues 300 case-bound attribution certificates: 100 ambiguous and
+200 identified, balanced 100/100 across environment and policy. A closed
+canonical release record binds the corpus, public projection, private routes,
+public case bytes, witnesses, and certificates under pinned roots. Parsing
+checks those bindings without executing a sealed source; hashes provide
+integrity, not signatures, so a release consumer must pin the expected root.
+
+This is verified in-memory evidence and truth construction, not a benchmark
+result. The next release gate is a fresh-process capability harness,
+deterministic baselines and evaluator, exact metrics, and a seed-provenance
+release record. Participant code must not receive the full WitnessGap package
+because it contains the authored catalog, sealed-source generator, and
+evaluator truth implementation.
 
 See [the attribution contract](docs/attribution-contract.md) for the current
 formal boundary, [the threat model](docs/threat-model.md) for the trusted

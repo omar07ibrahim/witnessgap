@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import inspect
 import json
+import subprocess
+import sys
+import textwrap
 from collections import Counter
 from dataclasses import replace
 from typing import cast
 
 import pytest
 
+import witnessgap.workspace100 as workspace100_package
 from witnessgap.canonical import JsonValue, canonical_json
 from witnessgap.identifiability import UnknownReason, VerdictKind
 from witnessgap.model import TargetFamily
@@ -542,6 +547,54 @@ def test_truth_parser_rejects_nested_manifest_certificate_and_view_tampering(
     public_case["view"] = ViewKind.OWNER_PROBE.value
     with pytest.raises(ValueError, match=r"owner-probe|metadata"):
         Workspace100TruthSet.from_canonical_bytes(canonical_json(cast(JsonValue, raw)))
+
+
+def test_truth_module_has_no_search_or_self_authored_anchor_dependency() -> None:
+    source = inspect.getsource(truth_module)
+
+    for forbidden in (
+        "CandidateRegistry",
+        "RepairPanel",
+        "trust_anchor_for_manifest",
+        "witnessgap.oracle",
+    ):
+        assert forbidden not in source
+    assert "truth" not in workspace100_package.__all__
+
+
+def test_truth_import_preserves_runtime_digests_and_does_not_load_oracle() -> None:
+    script = textwrap.dedent(
+        """
+        import importlib
+        import sys
+
+        from witnessgap.verifier import verifier_implementation_digest
+        from witnessgap.workspace100.runtime import (
+            workspace100_adapter_implementation_digest,
+        )
+
+        before = (
+            verifier_implementation_digest(),
+            workspace100_adapter_implementation_digest(),
+        )
+        assert "witnessgap.workspace100.truth" not in sys.modules
+        assert "witnessgap.oracle" not in sys.modules
+        importlib.import_module("witnessgap.workspace100.truth")
+        after = (
+            verifier_implementation_digest(),
+            workspace100_adapter_implementation_digest(),
+        )
+        assert after == before
+        assert "witnessgap.oracle" not in sys.modules
+        """
+    )
+
+    subprocess.run(
+        [sys.executable, "-c", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
 
 
 def _truth_json(payload: bytes) -> dict[str, object]:

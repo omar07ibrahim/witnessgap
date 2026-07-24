@@ -90,6 +90,21 @@ metadata may cross that boundary. The repository currently constructs and
 checks the ID-free evidence bytes but does not yet provide or claim the
 required isolation launcher.
 
+Evaluator truth is a separate direct submodule and is not exported through the
+Workspace-100 runtime package surface. Its builder requires externally supplied
+trust anchors and replays sealed sources independently of evidence projection.
+The serialized truth record embeds public cases only so it can reconstruct the
+frozen public roots; the complete record, private assignments, certificates,
+and witnesses remain evaluator-only capabilities.
+
+Canonical parsing verifies hashes and bindings but is not a signature,
+transparency proof, or substitute for semantic replay. A party able to rewrite
+every record can also compute new self-consistent roots. Release consumers must
+obtain the expected corpus, projection, adapter, verifier, trust-anchor, and
+truth roots through an independent authenticated channel. Replaying the
+builder from sealed openings is required when semantic verification, rather
+than structural release integrity, is the goal.
+
 ## Explicit non-goals
 
 WitnessGap does not currently provide:
