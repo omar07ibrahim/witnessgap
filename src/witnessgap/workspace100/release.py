@@ -82,6 +82,8 @@ _RELEASE_IMPLEMENTATION_PATHS = (
     "workspace100/generation.py",
     "workspace100/records.py",
     "workspace100/release.py",
+    "workspace100/release_io.py",
+    "workspace100/release_storage.py",
     "workspace100/runtime.py",
     "workspace100/scoring.py",
     "workspace100/truth.py",
