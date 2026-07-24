@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import cast
 
@@ -16,7 +16,7 @@ from witnessgap.model import (
     ReplayResult,
     StateRead,
 )
-from witnessgap.source import SealedWorldSource
+from witnessgap.source import SealedWorldSource, package_implementation_digest
 
 
 class WorkspaceCause(StrEnum):
@@ -35,6 +35,13 @@ _TASK_SCHEMA_ID = "workspace_release_notes_v1"
 _TASK_ID = "northstar_release_notes_001"
 _STATE_CHANNELS = ("draft_store_epoch", "policy_selection")
 _SOURCE_FORMAT = "witnessgap.workspace-source.v1"
+_ADAPTER_ID = "workspace_release_notes_v1"
+_ADAPTER_IMPLEMENTATION_PATHS = (
+    "canonical.py",
+    "model.py",
+    "source.py",
+    "worlds/workspace.py",
+)
 _SOURCE_SALTS = {
     WorkspaceCause.ENVIRONMENT: bytes.fromhex(
         "3129d2854013fd4074f80a374fdb021d51731ba66c416c7463cbdf546d72ee21"
@@ -50,10 +57,33 @@ class _WorkspaceState:
     approved_pointer: str
     selected_pointer: str
 
-    def selected_revision(self) -> str:
-        if self.selected_pointer == "approved":
-            return self.approved_pointer
-        return self.selected_pointer
+
+@dataclass(slots=True)
+class _RecordingState:
+    """The only state view exposed to downstream tool execution."""
+
+    snapshot: _WorkspaceState
+    _reads: list[StateRead] = field(default_factory=list)
+
+    def read(self, channel: str) -> str:
+        if channel == "policy_selection":
+            value = self.snapshot.selected_pointer
+        elif channel == "draft_store_epoch":
+            value = self.snapshot.approved_pointer
+        else:
+            raise KeyError(channel)
+        self._reads.append(
+            StateRead(
+                sequence=len(self._reads),
+                channel=channel,
+                value_digest=_state_value_digest(value),
+            )
+        )
+        return value
+
+    @property
+    def read_log(self) -> tuple[StateRead, ...]:
+        return tuple(self._reads)
 
 
 @dataclass(slots=True)
@@ -71,41 +101,14 @@ class _WorkspaceRunner:
         if unknown := interventions - known:
             raise ValueError(f"unknown interventions: {sorted(unknown)!r}")
 
-        state = self.initial_state
-        if "refresh_draft_store" in interventions:
-            state = _WorkspaceState(
-                approved_pointer=_APPROVED_REVISION,
-                selected_pointer=state.selected_pointer,
-            )
-        if "repair_draft_selection" in interventions:
-            state = _WorkspaceState(
-                approved_pointer=state.approved_pointer,
-                selected_pointer="approved",
-            )
-
-        reads = [
-            StateRead(
-                sequence=0,
-                channel="policy_selection",
-                value_digest=canonical_digest(
-                    "witnessgap.state-value.v1",
-                    {"value": state.selected_pointer},
-                ),
-            )
-        ]
-        if state.selected_pointer == "approved":
-            reads.append(
-                StateRead(
-                    sequence=1,
-                    channel="draft_store_epoch",
-                    value_digest=canonical_digest(
-                        "witnessgap.state-value.v1",
-                        {"value": state.approved_pointer},
-                    ),
-                )
-            )
-
-        document = state.selected_revision()
+        state = _apply_interventions(self.initial_state, interventions)
+        recording_state = _RecordingState(state)
+        selected_pointer = recording_state.read("policy_selection")
+        document = (
+            recording_state.read("draft_store_epoch")
+            if selected_pointer == "approved"
+            else selected_pointer
+        )
         approved = document == _APPROVED_REVISION
         trace = canonical_json(
             {
@@ -136,7 +139,7 @@ class _WorkspaceRunner:
             source_snapshot_digest=self.source_snapshot_digest,
             public_trace=trace,
             terminal_state=terminal_state,
-            state_read_log=tuple(reads),
+            state_read_log=recording_state.read_log,
             intervention_log=tuple(sorted(interventions)),
         )
 
@@ -176,6 +179,18 @@ class WorkspaceWorld:
     @property
     def task_id(self) -> str:
         return _TASK_ID
+
+    @property
+    def source_format_id(self) -> str:
+        return _SOURCE_FORMAT
+
+    @property
+    def adapter_id(self) -> str:
+        return _ADAPTER_ID
+
+    @property
+    def adapter_implementation_digest(self) -> str:
+        return workspace_adapter_implementation_digest()
 
     @property
     def declared_state_channels(self) -> tuple[str, ...]:
@@ -218,11 +233,33 @@ class WorkspaceWorld:
         )
 
     @property
+    def artifact_validator_contract_digest(self) -> str:
+        return canonical_digest(
+            "witnessgap.artifact-validator-contract.v1",
+            {
+                "format": "witnessgap.workspace-artifact-validator.v1",
+                "source_format_id": self.source_format_id,
+                "task_schema_id": self.task_schema_id,
+            },
+        )
+
+    @property
     def success_oracle_contract_digest(self) -> str:
         return canonical_digest(
             "witnessgap.success-oracle-contract.v1",
             {
                 "format": "witnessgap.workspace-success-oracle.v1",
+                "task_schema_id": self.task_schema_id,
+            },
+        )
+
+    @property
+    def state_access_contract_digest(self) -> str:
+        return canonical_digest(
+            "witnessgap.state-access-contract.v1",
+            {
+                "declared_state_channels": self.declared_state_channels,
+                "format": "witnessgap.workspace-recording-state.v1",
                 "task_schema_id": self.task_schema_id,
             },
         )
@@ -254,13 +291,73 @@ class WorkspaceWorld:
             source_snapshot_digest=self.source_snapshot_digest,
         )
 
+    def validate_artifact(self, artifact: ExecutionArtifact) -> Outcome:
+        """Validate the complete execution before deriving its outcome."""
+
+        if artifact.source_snapshot_digest != self.source_snapshot_digest:
+            raise ValueError("execution artifact belongs to a different source snapshot")
+        interventions = frozenset(artifact.intervention_log)
+        known = {atom.name for atom in _ATOMS}
+        if unknown := interventions - known:
+            raise ValueError(
+                f"execution artifact contains unknown interventions: {sorted(unknown)!r}"
+            )
+
+        state = _apply_interventions(self._initial_state(), interventions)
+        selected_pointer = state.selected_pointer
+        document = state.approved_pointer if selected_pointer == "approved" else selected_pointer
+        approved = document == _APPROVED_REVISION
+
+        expected_reads = [
+            StateRead(
+                sequence=0,
+                channel="policy_selection",
+                value_digest=_state_value_digest(selected_pointer),
+            )
+        ]
+        if selected_pointer == "approved":
+            expected_reads.append(
+                StateRead(
+                    sequence=1,
+                    channel="draft_store_epoch",
+                    value_digest=_state_value_digest(state.approved_pointer),
+                )
+            )
+        if artifact.state_read_log != tuple(expected_reads):
+            raise ValueError("execution artifact state-read log contradicts the source snapshot")
+
+        terminal = _canonical_object(artifact.terminal_state, label="terminal state")
+        if set(terminal) != {"approved_content_present", "published_document"}:
+            raise ValueError("terminal state does not match the workspace oracle schema")
+        if terminal["approved_content_present"] is not approved:
+            raise ValueError("terminal state approval flag contradicts the source snapshot")
+        if terminal["published_document"] != document:
+            raise ValueError("terminal state document contradicts the source snapshot")
+
+        trace = _canonical_object(artifact.public_trace, label="public trace")
+        expected_trace: dict[str, JsonValue] = {
+            "events": [
+                {
+                    "arguments": {"workspace": "northstar"},
+                    "result": {"draft": document},
+                    "tool": "read_release_draft",
+                },
+                {
+                    "arguments": {"draft": document},
+                    "result": {"status": "published"},
+                    "tool": "publish_release_notes",
+                },
+            ],
+            "interventions": list(artifact.intervention_log),
+            "task": "Publish the approved Northstar release notes.",
+            "terminal": "approved_content_present" if approved else "approved_content_missing",
+        }
+        if trace != expected_trace:
+            raise ValueError("public trace contradicts the source snapshot or terminal state")
+        return Outcome.SUCCESS if approved else Outcome.FAILURE
+
     def evaluate_terminal(self, terminal_state: bytes) -> Outcome:
-        try:
-            value: object = json.loads(terminal_state)
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ValueError("terminal state is not valid UTF-8 JSON") from error
-        if not isinstance(value, dict) or canonical_json(value) != terminal_state:
-            raise ValueError("terminal state is not canonical JSON")
+        value = _canonical_object(terminal_state, label="terminal state")
         if set(value) != {"approved_content_present", "published_document"}:
             raise ValueError("terminal state does not match the workspace oracle schema")
         approved = value["approved_content_present"]
@@ -276,25 +373,29 @@ class WorkspaceWorld:
         artifact = self.fresh_runner().run(interventions)
         return ReplayResult(
             public_trace=artifact.public_trace,
-            outcome=self.evaluate_terminal(artifact.terminal_state),
+            outcome=self.validate_artifact(artifact),
             state_reads=tuple(sorted({read.channel for read in artifact.state_read_log})),
         )
 
     def _initial_state(self) -> _WorkspaceState:
-        if self.cause is WorkspaceCause.ENVIRONMENT:
-            return _WorkspaceState(
-                approved_pointer=_PREVIOUS_REVISION,
-                selected_pointer="approved",
-            )
-        return _WorkspaceState(
-            approved_pointer=_APPROVED_REVISION,
-            selected_pointer=_PREVIOUS_REVISION,
-        )
+        return _initial_state_for(self.cause)
 
 
 @dataclass(frozen=True, slots=True)
 class WorkspaceSourceAdapter:
     """Closed decoder for the versioned Workspace completion format."""
+
+    @property
+    def adapter_id(self) -> str:
+        return _ADAPTER_ID
+
+    @property
+    def source_format_id(self) -> str:
+        return _SOURCE_FORMAT
+
+    @property
+    def implementation_digest(self) -> str:
+        return workspace_adapter_implementation_digest()
 
     def decode(self, source: SealedWorldSource) -> WorkspaceWorld:
         try:
@@ -360,6 +461,15 @@ def workspace_sources() -> tuple[SealedWorldSource, SealedWorldSource]:
     return first, second
 
 
+def workspace_adapter_implementation_digest() -> str:
+    """Bind the actual installed modules that implement Workspace semantics."""
+
+    return package_implementation_digest(
+        "witnessgap.workspace-adapter-implementation.v1",
+        _ADAPTER_IMPLEMENTATION_PATHS,
+    )
+
+
 def workspace_twins() -> tuple[WorkspaceWorld, WorkspaceWorld]:
     """Return the deterministic policy/environment causal-twin pair."""
 
@@ -385,3 +495,38 @@ def _cause_for_state(state: _WorkspaceState) -> WorkspaceCause:
         if state == _initial_state_for(cause):
             return cause
     raise ValueError("workspace source initial state is outside the authored completion family")
+
+
+def _apply_interventions(
+    state: _WorkspaceState,
+    interventions: frozenset[str],
+) -> _WorkspaceState:
+    updated = state
+    if "refresh_draft_store" in interventions:
+        updated = _WorkspaceState(
+            approved_pointer=_APPROVED_REVISION,
+            selected_pointer=updated.selected_pointer,
+        )
+    if "repair_draft_selection" in interventions:
+        updated = _WorkspaceState(
+            approved_pointer=updated.approved_pointer,
+            selected_pointer="approved",
+        )
+    return updated
+
+
+def _state_value_digest(value: str) -> str:
+    return canonical_digest(
+        "witnessgap.state-value.v1",
+        {"value": value},
+    )
+
+
+def _canonical_object(payload: bytes, *, label: str) -> dict[str, object]:
+    try:
+        value: object = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"{label} is not valid UTF-8 JSON") from error
+    if not isinstance(value, dict) or canonical_json(cast(JsonValue, value)) != payload:
+        raise ValueError(f"{label} is not canonical JSON")
+    return cast(dict[str, object], value)

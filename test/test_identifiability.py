@@ -162,12 +162,23 @@ class RegistryFixtureWorld:
     repair_mode: str = "singleton"
     task_schema_id: str = "registry_fixture_v1"
     task_id: str = "registry_fixture_task"
+    source_format_id: str = "witnessgap.test-source.v1"
+    adapter_id: str = "registry_fixture_v1"
     declared_state_channels: tuple[str, ...] = ()
     state_reads: tuple[str, ...] = ()
     intervention_contract_version: str = "fixture_interventions_v1"
     probe_contract_version: str = "fixture_probes_v1"
     runner_contract_version: str = "fixture_runner_v1"
+    artifact_validator_contract_version: str = "fixture_artifact_validator_v1"
     success_oracle_contract_version: str = "fixture_success_oracle_v1"
+    state_access_contract_version: str = "fixture_state_access_v1"
+
+    @property
+    def adapter_implementation_digest(self) -> str:
+        return canonical_digest(
+            "witnessgap.adapter-implementation.v1",
+            {"version": "fixture_adapter_v1"},
+        )
 
     @property
     def completion_commitment(self) -> str:
@@ -200,10 +211,24 @@ class RegistryFixtureWorld:
         )
 
     @property
+    def artifact_validator_contract_digest(self) -> str:
+        return canonical_digest(
+            "witnessgap.artifact-validator-contract.v1",
+            {"version": self.artifact_validator_contract_version},
+        )
+
+    @property
     def success_oracle_contract_digest(self) -> str:
         return canonical_digest(
             "witnessgap.success-oracle-contract.v1",
             {"version": self.success_oracle_contract_version},
+        )
+
+    @property
+    def state_access_contract_digest(self) -> str:
+        return canonical_digest(
+            "witnessgap.state-access-contract.v1",
+            {"version": self.state_access_contract_version},
         )
 
     @property

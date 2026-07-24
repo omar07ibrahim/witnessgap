@@ -11,7 +11,7 @@ from witnessgap.canonical import JsonValue, canonical_digest
 from witnessgap.model import FiniteWorld, InterventionAtom, Outcome, TargetFamily, Witness
 from witnessgap.oracle import RepairPanel, enumerate_repair_panel
 
-_REGISTRY_FORMAT = "witnessgap.registry.v1"
+_REGISTRY_FORMAT = "witnessgap.registry.v2"
 _SHA256_HEX_LENGTH = 64
 
 
@@ -25,6 +25,18 @@ class ProbeWorld(FiniteWorld, Protocol):
     @property
     def task_id(self) -> str:
         """Shared public task identity for the complete candidate family."""
+
+    @property
+    def source_format_id(self) -> str:
+        """Versioned closed schema decoded for every replay."""
+
+    @property
+    def adapter_id(self) -> str:
+        """Identifier resolved through the verifier's trusted adapter registry."""
+
+    @property
+    def adapter_implementation_digest(self) -> str:
+        """Digest of the installed source bundle implementing world semantics."""
 
     @property
     def declared_state_channels(self) -> tuple[str, ...]:
@@ -47,8 +59,16 @@ class ProbeWorld(FiniteWorld, Protocol):
         """Commitment to deterministic execution semantics."""
 
     @property
+    def artifact_validator_contract_digest(self) -> str:
+        """Commitment to whole-artifact consistency checks."""
+
+    @property
     def success_oracle_contract_digest(self) -> str:
         """Commitment to terminal success semantics."""
+
+    @property
+    def state_access_contract_digest(self) -> str:
+        """Commitment to the state-recording interface."""
 
     @property
     def probe_names(self) -> tuple[str, ...]:
@@ -164,12 +184,17 @@ class RegistryManifest:
 
     task_schema_id: str
     task_id: str
+    source_format_id: str
+    adapter_id: str
+    adapter_implementation_digest: str
     atoms: tuple[InterventionAtom, ...]
     intervention_contract_digest: str
     probe_names: tuple[str, ...]
     probe_contract_digest: str
     runner_contract_digest: str
+    artifact_validator_contract_digest: str
     success_oracle_contract_digest: str
+    state_access_contract_digest: str
     declared_state_channels: tuple[str, ...]
     candidate_commitments: tuple[str, ...]
 
@@ -185,7 +210,10 @@ class RegistryManifest:
     @property
     def digest(self) -> str:
         payload: dict[str, JsonValue] = {
+            "adapter_id": self.adapter_id,
+            "adapter_implementation_digest": self.adapter_implementation_digest,
             "atoms": tuple({"name": atom.name, "target": atom.target} for atom in self.atoms),
+            "artifact_validator_contract_digest": self.artifact_validator_contract_digest,
             "candidate_commitments": self.candidate_commitments,
             "coverage_manifest_digest": self.coverage_digest,
             "format": _REGISTRY_FORMAT,
@@ -193,6 +221,8 @@ class RegistryManifest:
             "probe_names": self.probe_names,
             "probe_contract_digest": self.probe_contract_digest,
             "runner_contract_digest": self.runner_contract_digest,
+            "source_format_id": self.source_format_id,
+            "state_access_contract_digest": self.state_access_contract_digest,
             "success_oracle_contract_digest": self.success_oracle_contract_digest,
             "task_id": self.task_id,
             "task_schema_id": self.task_schema_id,
@@ -220,12 +250,17 @@ class CandidateRegistry:
         manifest = RegistryManifest(
             task_schema_id=reference.task_schema_id,
             task_id=reference.task_id,
+            source_format_id=reference.source_format_id,
+            adapter_id=reference.adapter_id,
+            adapter_implementation_digest=reference.adapter_implementation_digest,
             atoms=reference.atoms,
             intervention_contract_digest=reference.intervention_contract_digest,
             probe_names=reference.probe_names,
             probe_contract_digest=reference.probe_contract_digest,
             runner_contract_digest=reference.runner_contract_digest,
+            artifact_validator_contract_digest=reference.artifact_validator_contract_digest,
             success_oracle_contract_digest=reference.success_oracle_contract_digest,
+            state_access_contract_digest=reference.state_access_contract_digest,
             declared_state_channels=reference.declared_state_channels,
             candidate_commitments=tuple(sorted(commitments)),
         )
@@ -414,10 +449,13 @@ def _validate_world_family(worlds: tuple[ProbeWorld, ...]) -> ProbeWorld:
                 f"{world.world_id}: completion commitment must be a lowercase SHA-256 digest"
             )
         contract_digests = (
+            world.adapter_implementation_digest,
             world.intervention_contract_digest,
             world.probe_contract_digest,
             world.runner_contract_digest,
+            world.artifact_validator_contract_digest,
             world.success_oracle_contract_digest,
+            world.state_access_contract_digest,
         )
         if not all(_is_sha256(digest) for digest in contract_digests):
             raise RegistryError(
@@ -430,12 +468,17 @@ def _family_contract(world: ProbeWorld) -> tuple[object, ...]:
     return (
         world.task_schema_id,
         world.task_id,
+        world.source_format_id,
+        world.adapter_id,
+        world.adapter_implementation_digest,
         world.atoms,
         world.intervention_contract_digest,
         world.probe_names,
         world.probe_contract_digest,
         world.runner_contract_digest,
+        world.artifact_validator_contract_digest,
         world.success_oracle_contract_digest,
+        world.state_access_contract_digest,
         world.declared_state_channels,
     )
 

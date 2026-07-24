@@ -1,18 +1,31 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
+from typing import cast
 
 import pytest
 
-from witnessgap.identifiability import CandidateRegistry, Evidence, VerdictKind
-from witnessgap.model import ExecutionRunner, Outcome
+from witnessgap.identifiability import (
+    CandidateRegistry,
+    Evidence,
+    ProbeObservation,
+    VerdictKind,
+)
+from witnessgap.model import Outcome
+from witnessgap.source import SealedWorldSource
 from witnessgap.verifier import (
     VerificationError,
     evidence_digest,
     verify_registry_attribution,
-    verify_world_panel,
+    verify_source_panel,
 )
-from witnessgap.worlds.workspace import WorkspaceCause, WorkspaceWorld, workspace_twins
+from witnessgap.worlds.workspace import (
+    WorkspaceCause,
+    WorkspaceWorld,
+    workspace_source,
+    workspace_sources,
+    workspace_twins,
+)
 
 
 def world(cause: WorkspaceCause) -> WorkspaceWorld:
@@ -23,7 +36,7 @@ def verify(evidence: Evidence) -> tuple[CandidateRegistry, object]:
     worlds = workspace_twins()
     registry = CandidateRegistry.build(worlds)
     verdict = verify_registry_attribution(
-        worlds,
+        workspace_sources(),
         manifest=registry.manifest,
         trusted_registry_digest=registry.manifest.digest,
         evidence=evidence,
@@ -37,7 +50,7 @@ def test_independent_verifier_reconstructs_the_ambiguity_witness() -> None:
     evidence = registry.observe(world(WorkspaceCause.ENVIRONMENT).world_id)
 
     verified = verify_registry_attribution(
-        worlds,
+        workspace_sources(),
         manifest=registry.manifest,
         trusted_registry_digest=registry.manifest.digest,
         evidence=evidence,
@@ -86,7 +99,7 @@ def test_independent_verifier_reconstructs_identified_views(
     )
 
     verified = verify_registry_attribution(
-        worlds,
+        workspace_sources(),
         manifest=registry.manifest,
         trusted_registry_digest=registry.manifest.digest,
         evidence=evidence,
@@ -117,12 +130,12 @@ def test_verified_panel_contains_every_subset_and_raw_minimal_witness(
     minimal_witness: tuple[str, ...],
     target: tuple[tuple[str, ...], ...],
 ) -> None:
-    source = world(cause)
+    source = workspace_source(cause)
     registry = CandidateRegistry.build(workspace_twins())
 
-    panel = verify_world_panel(source, manifest=registry.manifest)
+    panel = verify_source_panel(source, manifest=registry.manifest)
 
-    assert len(panel.receipts) == 1 << len(source.atoms)
+    assert len(panel.receipts) == 1 << len(registry.manifest.atoms)
     assert panel.minimal_witnesses == (minimal_witness,)
     assert panel.target_family == target
     assert panel.receipt_for(()).outcome is Outcome.FAILURE
@@ -143,7 +156,7 @@ def test_solver_cache_mutation_cannot_change_the_verified_result() -> None:
 
     forged_solver_verdict = forged_registry.attribute(evidence)
     verified = verify_registry_attribution(
-        worlds,
+        workspace_sources(),
         manifest=registry.manifest,
         trusted_registry_digest=registry.manifest.digest,
         evidence=evidence,
@@ -161,88 +174,104 @@ def test_verifier_requires_an_external_trust_anchor_and_complete_sources() -> No
 
     with pytest.raises(VerificationError, match="trusted digest"):
         verify_registry_attribution(
-            worlds,
+            workspace_sources(),
             manifest=registry.manifest,
             trusted_registry_digest="0" * 64,
             evidence=evidence,
         )
     with pytest.raises(VerificationError, match="exhaust"):
         verify_registry_attribution(
-            (worlds[0],),
+            (workspace_sources()[0],),
             manifest=registry.manifest,
             trusted_registry_digest=registry.manifest.digest,
             evidence=evidence,
         )
 
 
-@dataclass
-class ReusedRunnerWorld:
-    source: WorkspaceWorld
-    _runner: ExecutionRunner = field(init=False)
+def test_verifier_rejects_executable_world_objects_at_the_input_boundary() -> None:
+    worlds = workspace_twins()
+    registry = CandidateRegistry.build(worlds)
+    evidence = registry.observe(worlds[0].world_id)
 
-    def __post_init__(self) -> None:
-        self._runner = self.source.fresh_runner()
-
-    @property
-    def world_id(self) -> str:
-        return self.source.world_id
-
-    @property
-    def task_schema_id(self) -> str:
-        return self.source.task_schema_id
-
-    @property
-    def task_id(self) -> str:
-        return self.source.task_id
-
-    @property
-    def atoms(self) -> tuple[object, ...]:
-        return self.source.atoms
-
-    @property
-    def probe_names(self) -> tuple[str, ...]:
-        return self.source.probe_names
-
-    @property
-    def declared_state_channels(self) -> tuple[str, ...]:
-        return self.source.declared_state_channels
-
-    @property
-    def completion_commitment(self) -> str:
-        return self.source.completion_commitment
-
-    @property
-    def intervention_contract_digest(self) -> str:
-        return self.source.intervention_contract_digest
-
-    @property
-    def probe_contract_digest(self) -> str:
-        return self.source.probe_contract_digest
-
-    @property
-    def runner_contract_digest(self) -> str:
-        return self.source.runner_contract_digest
-
-    @property
-    def success_oracle_contract_digest(self) -> str:
-        return self.source.success_oracle_contract_digest
-
-    def probe(self, name: str) -> bytes:
-        return self.source.probe(name)
-
-    def fresh_runner(self) -> ExecutionRunner:
-        return self._runner
-
-    def evaluate_terminal(self, terminal_state: bytes) -> Outcome:
-        return self.source.evaluate_terminal(terminal_state)
+    with pytest.raises(VerificationError, match="exact SealedWorldSource"):
+        verify_registry_attribution(
+            cast(tuple[SealedWorldSource, ...], worlds),
+            manifest=registry.manifest,
+            trusted_registry_digest=registry.manifest.digest,
+            evidence=evidence,
+        )
 
 
-def test_verifier_rejects_a_factory_that_reuses_runner_state() -> None:
-    source = world(WorkspaceCause.ENVIRONMENT)
-    registry = CandidateRegistry.build(workspace_twins())
+def test_source_byte_mutation_breaks_the_committed_candidate_family() -> None:
+    worlds = workspace_twins()
+    registry = CandidateRegistry.build(worlds)
+    evidence = registry.observe(worlds[0].world_id)
+    sources = workspace_sources()
+    mutated = replace(sources[0], source_bytes=sources[0].source_bytes + b" ")
 
-    with pytest.raises(VerificationError, match="fresh replay failed"):
-        verify_world_panel(ReusedRunnerWorld(source), manifest=registry.manifest)
+    with pytest.raises(VerificationError, match="exhaust"):
+        verify_registry_attribution(
+            (mutated, sources[1]),
+            manifest=registry.manifest,
+            trusted_registry_digest=registry.manifest.digest,
+            evidence=evidence,
+        )
+
+
+def test_verifier_rejects_an_adapter_not_in_its_internal_trust_store() -> None:
+    worlds = workspace_twins()
+    registry = CandidateRegistry.build(worlds)
+    forged_manifest = replace(registry.manifest, adapter_id="forged_workspace_adapter")
+    evidence = replace(
+        registry.observe(worlds[0].world_id),
+        registry_digest=forged_manifest.digest,
+    )
+
+    with pytest.raises(VerificationError, match="not trusted"):
+        verify_registry_attribution(
+            workspace_sources(),
+            manifest=forged_manifest,
+            trusted_registry_digest=forged_manifest.digest,
+            evidence=evidence,
+        )
+
+
+def test_verifier_rejects_an_untrusted_adapter_implementation_digest() -> None:
+    worlds = workspace_twins()
+    registry = CandidateRegistry.build(worlds)
+    forged_manifest = replace(
+        registry.manifest,
+        adapter_implementation_digest="0" * 64,
+    )
+    evidence = replace(
+        registry.observe(worlds[0].world_id),
+        registry_digest=forged_manifest.digest,
+    )
+
+    with pytest.raises(VerificationError, match="installed adapter implementation"):
+        verify_registry_attribution(
+            workspace_sources(),
+            manifest=forged_manifest,
+            trusted_registry_digest=forged_manifest.digest,
+            evidence=evidence,
+        )
+
+
+def test_verifier_rejects_undeclared_probe_before_source_replay() -> None:
+    worlds = workspace_twins()
+    registry = CandidateRegistry.build(worlds)
+    evidence = replace(
+        registry.observe(worlds[0].world_id),
+        probes=(ProbeObservation(name="cause", value=b"environment"),),
+    )
+
+    with pytest.raises(VerificationError, match="undeclared probes"):
+        verify_registry_attribution(
+            workspace_sources(),
+            manifest=registry.manifest,
+            trusted_registry_digest=registry.manifest.digest,
+            evidence=evidence,
+        )
 
 
 def test_proof_roots_are_byte_deterministic() -> None:
@@ -251,13 +280,13 @@ def test_proof_roots_are_byte_deterministic() -> None:
     evidence = registry.observe(worlds[0].world_id)
 
     first = verify_registry_attribution(
-        worlds,
+        workspace_sources(),
         manifest=registry.manifest,
         trusted_registry_digest=registry.manifest.digest,
         evidence=evidence,
     )
     second = verify_registry_attribution(
-        worlds,
+        workspace_sources(),
         manifest=registry.manifest,
         trusted_registry_digest=registry.manifest.digest,
         evidence=evidence,
