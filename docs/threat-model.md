@@ -70,11 +70,12 @@ checked against the manifest before the adapter is invoked.
 
 ## Benchmark isolation
 
-The small repository fixture exposes authored sources for tests and examples.
-Workspace-100 evaluation must not import that fixture in the participant
-process. A capability-separated worker receives exactly one public evidence
-record and returns one claim. Sealed sources, pair membership, other views,
-unqueried receipts, and labels stay in a separate evaluator process.
+The small repository fixture and the Workspace-100 authored catalog/generator
+expose sealed inputs for tests and reproducibility. Workspace-100 evaluation
+must not import them in the participant process. A capability-separated worker
+receives exactly one public evidence record and returns one claim. Sealed
+sources, pair membership, other views, unqueried receipts, and labels stay in a
+separate evaluator process.
 
 ## Explicit non-goals
 

@@ -2,9 +2,11 @@
 
 Protocol ID: `workspace-100-v1`
 
-Status: frozen design draft; no generated corpus or result exists yet. A change
-to size, evidence views, scoring grain, metric formulas, or semantic contracts
-requires a new protocol ID.
+Status: frozen protocol with an implemented authored catalog and in-memory
+sealed-source generator. No trusted runtime adapter, release artifact corpus,
+evaluated claim, or benchmark result exists yet. A change to size, evidence
+views, scoring grain, metric formulas, or semantic contracts requires a new
+protocol ID.
 
 Workspace-100 is the Stage B engineering slice for WitnessGap. It tests two
 claims inside one synthetic, finite family:
@@ -26,12 +28,20 @@ The slice contains:
 - 50 exact causal-twin pairs;
 - 100 episodes;
 - 2 intervention atoms and 4 exhaustive subsets per episode;
-- 400 unique replay receipts per generation.
+- 400 unique replay receipts per generation;
 - 400 episode-to-view assignments;
 - 300 unique participant evidence cases.
 
 The independent verifier executes each subset from two fresh snapshots, so one
 verification generation performs 800 runner executions.
+
+The implemented generator requires an explicit exact 32-byte seed. HMAC-SHA256
+derives one salt from each canonical source under a versioned domain; no
+randomness, clock, path, environment variable, or hidden side coordinate enters
+generation. The seed changes salts, commitments, pair IDs, episode IDs, and the
+corpus root, but not the 100 source byte strings. Sources inside a pair are
+ordered by commitment. The generator writes no release artifacts and creates no
+attribution labels or results.
 
 Trace-only and owner-probe evidence is byte-identical between the two
 completions of a pair. Each is therefore scored once at pair grain: 50

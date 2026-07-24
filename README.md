@@ -102,8 +102,14 @@ trace/terminal/read-log artifact, and binds the result to externally pinned
 registry, adapter, and verifier digests. Search-time `minimal_witnesses` and
 `target_family` caches are outside that verifier's trust path.
 
-The next release gate is a 100-episode Workspace slice with 50 exact twin pairs
-that remain `unknown` until an informative probe or replay result is exposed.
+The authored Workspace-100 layer now defines five closed templates, 50 explicit
+variants, and a deterministic generator for 100 salted source openings. It
+validates the twin intervention matrix, global identity uniqueness, canonical
+round-trips, and participant-visible leakage without claiming an evaluated
+result.
+
+The next release gate is a separate trusted Workspace-100 runtime adapter that
+can reconstruct and independently verify all 50 committed twin registries.
 
 See [the attribution contract](docs/attribution-contract.md) for the current
 formal boundary, [the threat model](docs/threat-model.md) for the trusted
