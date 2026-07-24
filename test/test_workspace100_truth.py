@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 from collections import Counter
 from dataclasses import replace
+from typing import cast
 
 import pytest
 
+from witnessgap.canonical import JsonValue, canonical_json
 from witnessgap.identifiability import UnknownReason, VerdictKind
 from witnessgap.model import TargetFamily
 from witnessgap.trust import VerificationTrustAnchor
@@ -27,6 +30,7 @@ from witnessgap.workspace100.views import (
 
 _SEED = bytes.fromhex("713d96c0fcadb930599f4f4370df3484766872ac406f1c26c5a360a996f29ec5")
 _SHA256_HEX_LENGTH = 64
+_MAX_TRUTH_BYTES = 4 << 20
 _PAIR_COUNT = 50
 _SOURCE_COUNT = 100
 _CASE_COUNT = 300
@@ -83,6 +87,11 @@ def truth_set(
         evidence_views.projection_root,
     ) == public_roots
     return truth
+
+
+@pytest.fixture(scope="module")
+def truth_bytes(truth_set: Workspace100TruthSet) -> bytes:
+    return truth_set.to_canonical_bytes()
 
 
 def test_truth_route_binds_external_anchor_and_exact_source_provenance(
@@ -456,3 +465,86 @@ def test_truth_rejects_public_root_and_singleton_assignment_tampering(
     )
     with pytest.raises(ValueError, match=r"completion route|assignments|compatibility"):
         replace(truth_set, cases=forged_cases)
+
+
+def test_truth_release_round_trip_requires_no_source_replay(
+    monkeypatch: pytest.MonkeyPatch,
+    truth_set: Workspace100TruthSet,
+    truth_bytes: bytes,
+) -> None:
+    def forbidden_replay(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("truth parsing attempted source replay")
+
+    monkeypatch.setattr(truth_module, "verify_source_panel", forbidden_replay)
+    monkeypatch.setattr(truth_module, "verify_registry_attributions", forbidden_replay)
+
+    parsed = Workspace100TruthSet.from_canonical_bytes(truth_bytes)
+
+    assert parsed == truth_set
+    assert parsed.to_canonical_bytes() == truth_bytes
+    assert parsed.route_root == _EXPECTED_ROUTE_ROOT
+    assert parsed.certificate_root == _EXPECTED_CERTIFICATE_ROOT
+    assert parsed.truth_root == _EXPECTED_TRUTH_ROOT
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["route_root", "certificate_root", "truth_root"],
+)
+def test_truth_parser_rejects_stored_private_root_mutation(
+    truth_bytes: bytes,
+    field: str,
+) -> None:
+    raw = _truth_json(truth_bytes)
+    raw[field] = "0" * _SHA256_HEX_LENGTH
+
+    with pytest.raises(ValueError, match=f"stored {field.removesuffix('_root')} root"):
+        Workspace100TruthSet.from_canonical_bytes(canonical_json(cast(JsonValue, raw)))
+
+
+def test_truth_parser_rejects_noncanonical_and_open_outer_records(
+    truth_bytes: bytes,
+) -> None:
+    with pytest.raises(ValueError, match="canonical JSON"):
+        Workspace100TruthSet.from_canonical_bytes(truth_bytes + b"\n")
+    with pytest.raises(ValueError, match=r"1\.\."):
+        Workspace100TruthSet.from_canonical_bytes(b"0" * (_MAX_TRUTH_BYTES + 1))
+
+    raw = _truth_json(truth_bytes)
+    raw["unexpected"] = None
+    with pytest.raises(ValueError, match="unknown or missing"):
+        Workspace100TruthSet.from_canonical_bytes(canonical_json(cast(JsonValue, raw)))
+
+
+def test_truth_parser_rejects_nested_manifest_certificate_and_view_tampering(
+    truth_bytes: bytes,
+) -> None:
+    raw = _truth_json(truth_bytes)
+    routes = cast(list[object], raw["routes"])
+    first_route = cast(dict[str, object], routes[0])
+    manifest = cast(dict[str, object], first_route["manifest"])
+    manifest["unexpected"] = None
+    with pytest.raises(ValueError, match=r"manifest|unknown|canonical"):
+        Workspace100TruthSet.from_canonical_bytes(canonical_json(cast(JsonValue, raw)))
+
+    raw = _truth_json(truth_bytes)
+    cases = cast(list[object], raw["cases"])
+    first_case = cast(dict[str, object], cases[0])
+    certificate = cast(dict[str, object], first_case["certificate"])
+    certificate["proof_root"] = "0" * _SHA256_HEX_LENGTH
+    with pytest.raises(ValueError, match="proof root"):
+        Workspace100TruthSet.from_canonical_bytes(canonical_json(cast(JsonValue, raw)))
+
+    raw = _truth_json(truth_bytes)
+    cases = cast(list[object], raw["cases"])
+    first_case = cast(dict[str, object], cases[0])
+    public_case = cast(dict[str, object], first_case["public_case"])
+    public_case["view"] = ViewKind.OWNER_PROBE.value
+    with pytest.raises(ValueError, match=r"owner-probe|metadata"):
+        Workspace100TruthSet.from_canonical_bytes(canonical_json(cast(JsonValue, raw)))
+
+
+def _truth_json(payload: bytes) -> dict[str, object]:
+    raw: object = json.loads(payload)
+    assert type(raw) is dict
+    return cast(dict[str, object], raw)

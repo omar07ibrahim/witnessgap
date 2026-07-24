@@ -30,6 +30,7 @@ from witnessgap.verifier import (
 )
 from witnessgap.workspace100 import views as views_module
 from witnessgap.workspace100.catalog import TEMPLATES
+from witnessgap.workspace100.evidence import PublicEvidenceEnvelope
 from witnessgap.workspace100.generation import (
     GeneratedPair,
     Workspace100Corpus,
@@ -63,6 +64,7 @@ _PANEL_ROOT_COUNT = 150
 _PANEL_ROOTS_PER_PAIR = 3
 _ID_DIGEST_CHARACTERS = 24
 _SHA256_HEX_LENGTH = 64
+_MAX_TRUTH_BYTES = 4 << 20
 _VIEW_ORDER = tuple(ViewKind)
 _VIEW_RANK = {view: index for index, view in enumerate(_VIEW_ORDER)}
 _TEMPLATE_RANK = {template_id: index for index, template_id in enumerate(TemplateId)}
@@ -91,6 +93,7 @@ _TRUTH_ROUTE_SET_FORMAT = "witnessgap.workspace100-truth-route-set.v1"
 _TRUTH_CASE_FORMAT = "witnessgap.workspace100-truth-case.v1"
 _TRUTH_CERTIFICATE_SET_FORMAT = "witnessgap.workspace100-truth-certificates.v1"
 _TRUTH_SET_FORMAT = "witnessgap.workspace100-truth-set.v1"
+_PUBLIC_CASE_FORMAT = "witnessgap.workspace100-evidence-case.v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -319,6 +322,24 @@ class Workspace100TruthSet:
             route_root=_route_root(self._routes),
             certificate_root=_certificate_root(self.cases),
         )
+
+    def to_payload(self) -> dict[str, JsonValue]:
+        """Return the closed release payload, including its three private roots."""
+
+        self.validate()
+        return _truth_storage_payload(self)
+
+    def to_canonical_bytes(self) -> bytes:
+        payload = canonical_json(self.to_payload())
+        if len(payload) > _MAX_TRUTH_BYTES:
+            raise ValueError(f"Workspace-100 truth exceeds the {_MAX_TRUTH_BYTES}-byte limit")
+        return payload
+
+    @classmethod
+    def from_canonical_bytes(cls, payload: bytes) -> Workspace100TruthSet:
+        """Parse one closed truth release without replaying sealed sources."""
+
+        return _parse_truth_set(payload)
 
 
 def build_workspace100_truth(
@@ -880,6 +901,28 @@ def _truth_root(
     return canonical_digest(_TRUTH_SET_FORMAT, payload)
 
 
+def _truth_storage_payload(truth: Workspace100TruthSet) -> dict[str, JsonValue]:
+    route_root = _route_root(truth._routes)
+    certificate_root = _certificate_root(truth.cases)
+    return {
+        "assignment_root": truth.assignment_root,
+        "cases": tuple(case.root_payload() for case in truth.cases),
+        "certificate_root": certificate_root,
+        "corpus_root": truth.corpus_root,
+        "evidence_root": truth.evidence_root,
+        "format": _TRUTH_SET_FORMAT,
+        "projection_root": truth.projection_root,
+        "protocol_id": PROTOCOL_ID,
+        "route_root": route_root,
+        "routes": tuple(route.root_payload() for route in truth._routes),
+        "truth_root": _truth_root(
+            truth,
+            route_root=route_root,
+            certificate_root=certificate_root,
+        ),
+    }
+
+
 def _truth_route_sort_key(route: _TruthPairRoute) -> tuple[int, str, str]:
     return (
         _TEMPLATE_RANK[route.template_id],
@@ -922,6 +965,342 @@ def _canonical_object(payload: bytes) -> JsonValue:
     if not canonical:
         raise ValueError("nested truth record is not one canonical JSON object")
     return cast(JsonValue, raw)
+
+
+def _parse_truth_set(payload: bytes) -> Workspace100TruthSet:
+    raw = _parse_truth_object(payload)
+    expected_fields = {
+        "assignment_root",
+        "cases",
+        "certificate_root",
+        "corpus_root",
+        "evidence_root",
+        "format",
+        "projection_root",
+        "protocol_id",
+        "route_root",
+        "routes",
+        "truth_root",
+    }
+    _require_closed_fields(raw, expected_fields, label="truth set")
+    if raw["format"] != _TRUTH_SET_FORMAT:
+        raise ValueError("Workspace-100 truth format is unsupported")
+    if raw["protocol_id"] != PROTOCOL_ID:
+        raise ValueError("Workspace-100 truth protocol is unsupported")
+    routes_raw = _required_array(raw, "routes")
+    cases_raw = _required_array(raw, "cases")
+    if len(routes_raw) != _PAIR_COUNT:
+        raise ValueError("Workspace-100 truth payload must contain 50 routes")
+    if len(cases_raw) != _CASE_COUNT:
+        raise ValueError("Workspace-100 truth payload must contain 300 cases")
+
+    stored_route_root = _required_digest(raw, "route_root")
+    stored_certificate_root = _required_digest(raw, "certificate_root")
+    stored_truth_root = _required_digest(raw, "truth_root")
+    truth = Workspace100TruthSet(
+        corpus_root=_required_digest(raw, "corpus_root"),
+        assignment_root=_required_digest(raw, "assignment_root"),
+        evidence_root=_required_digest(raw, "evidence_root"),
+        projection_root=_required_digest(raw, "projection_root"),
+        _routes=tuple(_parse_truth_route(item) for item in routes_raw),
+        cases=tuple(_parse_truth_case(item) for item in cases_raw),
+    )
+    for label, stored, derived in (
+        ("route", stored_route_root, truth.route_root),
+        ("certificate", stored_certificate_root, truth.certificate_root),
+        ("truth", stored_truth_root, truth.truth_root),
+    ):
+        if stored != derived:
+            raise ValueError(f"stored {label} root contradicts the truth records")
+    if canonical_json(_truth_storage_payload(truth)) != payload:
+        raise ValueError("Workspace-100 truth failed canonical round-trip")
+    return truth
+
+
+def _parse_truth_object(payload: object) -> dict[str, object]:
+    if type(payload) is not bytes:
+        raise TypeError("Workspace-100 truth payload must be exact bytes")
+    if not payload or len(payload) > _MAX_TRUTH_BYTES:
+        raise ValueError(f"Workspace-100 truth payload must contain 1..{_MAX_TRUTH_BYTES} bytes")
+    try:
+        raw: object = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as error:
+        raise ValueError("Workspace-100 truth is not valid UTF-8 JSON") from error
+    try:
+        canonical = type(raw) is dict and canonical_json(cast(JsonValue, raw)) == payload
+    except (RecursionError, TypeError) as error:
+        raise ValueError("Workspace-100 truth contains unsupported JSON") from error
+    if not canonical:
+        raise ValueError("Workspace-100 truth is not one canonical JSON object")
+    return cast(dict[str, object], raw)
+
+
+def _parse_truth_route(value: object) -> _TruthPairRoute:
+    raw = _closed_object(
+        value,
+        {
+            "format",
+            "manifest",
+            "pair_id",
+            "protocol_id",
+            "sources",
+            "split",
+            "task_id",
+            "template_id",
+            "trust_anchor",
+        },
+        label="truth route",
+    )
+    if raw["format"] != _TRUTH_ROUTE_FORMAT:
+        raise ValueError("truth route format is unsupported")
+    if raw["protocol_id"] != PROTOCOL_ID:
+        raise ValueError("truth route protocol is unsupported")
+    sources_raw = _required_array(raw, "sources")
+    if len(sources_raw) != _PAIR_SIZE:
+        raise ValueError("truth route must contain two source records")
+    sources = tuple(_parse_truth_source(item) for item in sources_raw)
+    manifest = RegistryManifest.from_canonical_bytes(
+        _nested_object_bytes(raw["manifest"], label="truth route manifest")
+    )
+    anchor = VerificationTrustAnchor.from_canonical_bytes(
+        _nested_object_bytes(raw["trust_anchor"], label="truth route anchor")
+    )
+    route = _TruthPairRoute(
+        pair_id=_required_string(raw, "pair_id"),
+        task_id=_required_string(raw, "task_id"),
+        template_id=_parse_template_id(raw["template_id"]),
+        split=_parse_split(raw["split"]),
+        manifest=manifest,
+        trust_anchor=anchor,
+        sources=(sources[0], sources[1]),
+    )
+    _require_nested_round_trip(route.root_payload(), raw, label="truth route")
+    return route
+
+
+def _parse_truth_source(value: object) -> _TruthSourceBinding:
+    raw = _closed_object(
+        value,
+        {
+            "completion_commitment",
+            "episode_id",
+            "evidence_digests",
+            "format",
+            "source_snapshot_digest",
+        },
+        label="truth source",
+    )
+    if raw["format"] != _TRUTH_SOURCE_FORMAT:
+        raise ValueError("truth source format is unsupported")
+    bindings_raw = _required_array(raw, "evidence_digests")
+    if len(bindings_raw) != len(_VIEW_ORDER):
+        raise ValueError("truth source must contain four evidence bindings")
+    bindings: list[tuple[ViewKind, str]] = []
+    for item in bindings_raw:
+        binding = _closed_object(
+            item,
+            {"digest", "view"},
+            label="truth source evidence binding",
+        )
+        bindings.append(
+            (
+                _parse_view(binding["view"]),
+                _required_digest(binding, "digest"),
+            )
+        )
+    source = _TruthSourceBinding(
+        episode_id=_required_string(raw, "episode_id"),
+        completion_commitment=_required_digest(raw, "completion_commitment"),
+        source_snapshot_digest=_required_digest(raw, "source_snapshot_digest"),
+        evidence_digests=tuple(bindings),
+    )
+    _require_nested_round_trip(source.root_payload(), raw, label="truth source")
+    return source
+
+
+def _parse_truth_case(value: object) -> TruthCaseRecord:
+    raw = _closed_object(
+        value,
+        {
+            "assignment_episode_ids",
+            "case_id",
+            "certificate",
+            "evidence_digest",
+            "format",
+            "minimal_witnesses",
+            "pair_id",
+            "public_case",
+            "route_digest",
+            "split",
+            "task_id",
+            "template_id",
+            "view",
+        },
+        label="truth case",
+    )
+    if raw["format"] != _TRUTH_CASE_FORMAT:
+        raise ValueError("truth case format is unsupported")
+    assignment_ids = _required_array(raw, "assignment_episode_ids")
+    certificate = VerifiedAttribution.from_canonical_bytes(
+        _nested_object_bytes(raw["certificate"], label="truth case certificate")
+    )
+    case = TruthCaseRecord(
+        case_id=_required_string(raw, "case_id"),
+        pair_id=_required_string(raw, "pair_id"),
+        task_id=_required_string(raw, "task_id"),
+        template_id=_parse_template_id(raw["template_id"]),
+        split=_parse_split(raw["split"]),
+        view=_parse_view(raw["view"]),
+        evidence_digest=_required_digest(raw, "evidence_digest"),
+        assignment_episode_ids=tuple(
+            _exact_string(item, label="truth assignment episode ID") for item in assignment_ids
+        ),
+        route_digest=_required_digest(raw, "route_digest"),
+        public_case=_parse_public_case(raw["public_case"]),
+        certificate=certificate,
+        minimal_witnesses=_parse_minimal_witnesses(raw["minimal_witnesses"]),
+    )
+    _require_nested_round_trip(case.root_payload(), raw, label="truth case")
+    return case
+
+
+def _parse_public_case(value: object) -> PublicEvidenceCase:
+    raw = _closed_object(
+        value,
+        {
+            "evidence",
+            "evidence_digest",
+            "format",
+            "split",
+            "template_id",
+            "view",
+        },
+        label="truth public evidence case",
+    )
+    if raw["format"] != _PUBLIC_CASE_FORMAT:
+        raise ValueError("truth public evidence case format is unsupported")
+    case = PublicEvidenceCase(
+        template_id=_parse_template_id(raw["template_id"]),
+        split=_parse_split(raw["split"]),
+        view=_parse_view(raw["view"]),
+        envelope=PublicEvidenceEnvelope.from_canonical_bytes(
+            _nested_object_bytes(raw["evidence"], label="truth public evidence")
+        ),
+    )
+    if _required_digest(raw, "evidence_digest") != case.evidence_digest:
+        raise ValueError("truth public case digest contradicts its evidence")
+    _require_nested_round_trip(
+        case.root_payload(),
+        raw,
+        label="truth public evidence case",
+    )
+    return case
+
+
+def _parse_minimal_witnesses(value: object) -> tuple[Witness, ...] | None:
+    if value is None:
+        return None
+    if type(value) is not list:
+        raise ValueError("truth minimal_witnesses must be null or a JSON array")
+    witnesses: list[Witness] = []
+    for item in value:
+        if type(item) is not list:
+            raise ValueError("truth minimal witness must be a JSON array")
+        witnesses.append(
+            tuple(_exact_string(atom, label="truth minimal witness atom") for atom in item)
+        )
+    return tuple(witnesses)
+
+
+def _closed_object(
+    value: object,
+    expected_fields: set[str],
+    *,
+    label: str,
+) -> dict[str, object]:
+    if type(value) is not dict:
+        raise ValueError(f"{label} must be one JSON object")
+    raw = cast(dict[str, object], value)
+    _require_closed_fields(raw, expected_fields, label=label)
+    return raw
+
+
+def _require_closed_fields(
+    raw: dict[str, object],
+    expected_fields: set[str],
+    *,
+    label: str,
+) -> None:
+    if set(raw) != expected_fields:
+        raise ValueError(f"{label} contains unknown or missing fields")
+
+
+def _required_array(raw: dict[str, object], field: str) -> list[object]:
+    value = raw[field]
+    if type(value) is not list:
+        raise ValueError(f"{field} must be a JSON array")
+    return cast(list[object], value)
+
+
+def _required_string(raw: dict[str, object], field: str) -> str:
+    return _exact_string(raw[field], label=field)
+
+
+def _exact_string(value: object, *, label: str) -> str:
+    if type(value) is not str:
+        raise ValueError(f"{label} must be an exact string")
+    return value
+
+
+def _required_digest(raw: dict[str, object], field: str) -> str:
+    value = _required_string(raw, field)
+    if not _is_sha256(value):
+        raise ValueError(f"{field} must be a lowercase SHA-256 digest")
+    return value
+
+
+def _parse_template_id(value: object) -> TemplateId:
+    try:
+        return TemplateId(_exact_string(value, label="template_id"))
+    except ValueError as error:
+        raise ValueError("truth template_id is unsupported") from error
+
+
+def _parse_split(value: object) -> Split:
+    try:
+        return Split(_exact_string(value, label="split"))
+    except ValueError as error:
+        raise ValueError("truth split is unsupported") from error
+
+
+def _parse_view(value: object) -> ViewKind:
+    try:
+        return ViewKind(_exact_string(value, label="view"))
+    except ValueError as error:
+        raise ValueError("truth view is unsupported") from error
+
+
+def _nested_object_bytes(value: object, *, label: str) -> bytes:
+    if type(value) is not dict:
+        raise ValueError(f"{label} must be one JSON object")
+    try:
+        return canonical_json(cast(JsonValue, value))
+    except (RecursionError, TypeError) as error:
+        raise ValueError(f"{label} contains unsupported JSON") from error
+
+
+def _require_nested_round_trip(
+    payload: dict[str, JsonValue],
+    raw: dict[str, object],
+    *,
+    label: str,
+) -> None:
+    try:
+        encoded_raw = canonical_json(cast(JsonValue, raw))
+    except (RecursionError, TypeError) as error:
+        raise ValueError(f"{label} contains unsupported JSON") from error
+    if canonical_json(payload) != encoded_raw:
+        raise ValueError(f"{label} failed canonical round-trip")
 
 
 def _validate_truth_route_identity(route: _TruthPairRoute) -> None:
