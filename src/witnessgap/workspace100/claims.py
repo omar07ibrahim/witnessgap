@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import cast
 
 from witnessgap.canonical import JsonValue, canonical_digest, canonical_json
+from witnessgap.source import package_implementation_digest
 from witnessgap.workspace100.baselines import (
     BUILTIN_BASELINE_SET_ROOT,
     BuiltinBaseline,
@@ -45,6 +46,29 @@ CLAIM_METHOD_REGISTRY_FORMAT = (
 CLAIM_RUN_SET_FORMAT = "witnessgap.workspace100-claim-run-set.v1"
 CLAIM_SET_FORMAT = "witnessgap.workspace100-claim-set.v1"
 
+_CLAIMS_IMPLEMENTATION_DOMAIN = (
+    "witnessgap.workspace100-claims-implementation.v1"
+)
+_CLAIMS_IMPLEMENTATION_PATHS = (
+    "__init__.py",
+    "adapters.py",
+    "canonical.py",
+    "identifiability.py",
+    "model.py",
+    "source.py",
+    "trust.py",
+    "verifier.py",
+    "workspace100/__init__.py",
+    "workspace100/baselines.py",
+    "workspace100/catalog.py",
+    "workspace100/claims.py",
+    "workspace100/evidence.py",
+    "workspace100/generation.py",
+    "workspace100/records.py",
+    "workspace100/runtime.py",
+    "workspace100/views.py",
+    "workspace100/worker.py",
+)
 _METHOD_COUNT = 4
 _CASE_COUNT = 300
 _RUN_COUNT = _METHOD_COUNT * _CASE_COUNT
@@ -464,6 +488,15 @@ def load_verified_workspace100_claim_set(
         expected_limits=expected_limits,
     )
     return claim_set
+
+
+def workspace100_claims_implementation_digest() -> str:
+    """Bind the installed source closure for claim execution and validation."""
+
+    return package_implementation_digest(
+        _CLAIMS_IMPLEMENTATION_DOMAIN,
+        _CLAIMS_IMPLEMENTATION_PATHS,
+    )
 
 
 def evaluate_workspace100_baselines(

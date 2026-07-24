@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import textwrap
 from dataclasses import replace
 from typing import cast
 
@@ -25,6 +26,7 @@ from witnessgap.workspace100.claims import (
     evaluate_workspace100_baselines,
     load_verified_workspace100_claim_set,
     verify_workspace100_claim_bindings,
+    workspace100_claims_implementation_digest,
 )
 from witnessgap.workspace100.evidence import ParticipantClaim
 from witnessgap.workspace100.generation import generate_workspace100
@@ -58,6 +60,9 @@ _EXPECTED_RUN_ROOT = (
 )
 _EXPECTED_CLAIM_SET_ROOT = (
     "1e1d58d1760255d5b29e4afc0fc0f9ae26494b4cc40f27869d70851e2ee017e5"
+)
+_EXPECTED_CLAIMS_IMPLEMENTATION_DIGEST = (
+    "3b25959f44734b9d9284a0130ca18180b12922b209329b419dbd70b401537f74"
 )
 _UNKNOWN_CLAIM = ParticipantClaim(
     kind=VerdictKind.NOT_IDENTIFIABLE,
@@ -514,12 +519,38 @@ def test_evaluator_propagates_harness_fault_without_a_partial_artifact(
 
 
 def test_claim_evaluator_import_closure_excludes_private_truth() -> None:
+    script = textwrap.dedent(
+        """
+        import importlib
+        import sys
+        from pathlib import Path
+
+        import witnessgap
+
+        claims = importlib.import_module("witnessgap.workspace100.claims")
+        assert "witnessgap.workspace100.truth" not in sys.modules
+        package_root = Path(witnessgap.__file__).resolve().parent
+        executed = set()
+        for module in tuple(sys.modules.values()):
+            module_file = getattr(module, "__file__", None)
+            if not module_file or not module_file.endswith(".py"):
+                continue
+            try:
+                relative = Path(module_file).resolve().relative_to(package_root)
+            except ValueError:
+                continue
+            executed.add(relative.as_posix())
+        uncovered = sorted(
+            executed - set(claims._CLAIMS_IMPLEMENTATION_PATHS)
+        )
+        assert not uncovered, uncovered
+        """
+    )
     result = subprocess.run(
         (
             sys.executable,
             "-c",
-            "import sys; import witnessgap.workspace100.claims; "
-            "assert 'witnessgap.workspace100.truth' not in sys.modules",
+            script,
         ),
         check=False,
         capture_output=True,
@@ -527,6 +558,10 @@ def test_claim_evaluator_import_closure_excludes_private_truth() -> None:
     )
 
     assert result.returncode == 0, result.stderr
+    assert (
+        workspace100_claims_implementation_digest()
+        == _EXPECTED_CLAIMS_IMPLEMENTATION_DIGEST
+    )
 
 
 def test_claim_assembly_is_independent_of_input_record_order(
