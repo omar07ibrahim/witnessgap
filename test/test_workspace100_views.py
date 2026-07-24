@@ -4,18 +4,24 @@ import inspect
 import subprocess
 import sys
 import textwrap
-from collections import Counter
+from collections import Counter, defaultdict
+from collections.abc import Iterator
 from dataclasses import replace
+from typing import cast
 
 import pytest
 
+from witnessgap.identifiability import ProbeObservation
 from witnessgap.model import Outcome, TargetFamily
 from witnessgap.workspace100 import views as views_module
+from witnessgap.workspace100.evidence import PublicEvidenceEnvelope
 from witnessgap.workspace100.generation import Workspace100Corpus, generate_workspace100
 from witnessgap.workspace100.records import Split, TemplateId
 from witnessgap.workspace100.views import (
     VerifiedCompletionMaterial,
     VerifiedPairMaterial,
+    ViewKind,
+    Workspace100EvidenceViews,
     verify_workspace100_materials,
 )
 
@@ -24,8 +30,13 @@ _PAIR_COUNT = 50
 _COMPLETION_COUNT = 100
 _PANEL_RECEIPT_COUNT = 400
 _PROBE_RECEIPT_COUNT = 200
+_ASSIGNMENT_COUNT = 400
+_EVIDENCE_CASE_COUNT = 300
 _ENVIRONMENT_TARGET: TargetFamily = (("environment",),)
 _POLICY_TARGET: TargetFamily = (("policy",),)
+_EXPECTED_ASSIGNMENT_ROOT = "6a82d84186e25b6df926ac481f40a58d7808bc49ca7deb4e1a6bfab1aad1c454"
+_EXPECTED_EVIDENCE_ROOT = "4f5ed5eac99d3bf4eaedcafa3bbc019c06debba6372b4935dd57c6f09c9f3d71"
+_EXPECTED_PROJECTION_ROOT = "2b99bac2b2f914a06e33b87caab3959bcb5c4017496dd747f2dedec36e0b4776"
 
 
 @pytest.fixture(scope="module")
@@ -36,6 +47,13 @@ def corpus() -> Workspace100Corpus:
 @pytest.fixture(scope="module")
 def materials(corpus: Workspace100Corpus) -> tuple[VerifiedPairMaterial, ...]:
     return verify_workspace100_materials(corpus)
+
+
+@pytest.fixture(scope="module")
+def evidence_views(
+    materials: tuple[VerifiedPairMaterial, ...],
+) -> Workspace100EvidenceViews:
+    return views_module._project_verified_materials(materials)
 
 
 def test_all_authored_sources_receive_independent_panels_and_probe_receipts(
@@ -199,6 +217,331 @@ def test_material_records_rederive_panels_instead_of_trusting_cached_labels(
             replace(pair, completions=(forged, right))
 
 
+def test_pair_manifest_binds_atom_names_to_their_frozen_targets(
+    materials: tuple[VerifiedPairMaterial, ...],
+) -> None:
+    pair = materials[0]
+    forged_atoms = tuple(
+        replace(
+            atom,
+            target="policy" if atom.target == "environment" else "environment",
+        )
+        for atom in pair.manifest.atoms
+    )
+    forged_manifest = replace(pair.manifest, atoms=forged_atoms)
+
+    with pytest.raises(ValueError, match="frozen template"):
+        replace(pair, manifest=forged_manifest)
+
+
+def test_verified_receipts_project_to_the_frozen_400_to_300_join(
+    evidence_views: Workspace100EvidenceViews,
+) -> None:
+    assignments = evidence_views._assignments
+    cases = evidence_views.cases
+    assignments_by_digest = Counter(assignment.evidence_digest for assignment in assignments)
+    digests_by_pair: defaultdict[str, set[str]] = defaultdict(set)
+    for assignment in assignments:
+        digests_by_pair[assignment.pair_id].add(assignment.evidence_digest)
+
+    assert evidence_views.assignment_count == _ASSIGNMENT_COUNT
+    assert evidence_views.case_count == _EVIDENCE_CASE_COUNT
+    assert Counter(assignment.view for assignment in assignments) == dict.fromkeys(ViewKind, 100)
+    assert Counter(case.view for case in cases) == {
+        ViewKind.TRACE_ONLY: 50,
+        ViewKind.OWNER_PROBE: 50,
+        ViewKind.EPOCH_PROBE: 100,
+        ViewKind.REFRESH_RECEIPT: 100,
+    }
+    assert Counter(case.split for case in cases) == {
+        Split.DEVELOPMENT: 120,
+        Split.VALIDATION: 60,
+        Split.TEST: 120,
+    }
+    assert Counter(case.template_id for case in cases) == dict.fromkeys(TemplateId, 60)
+    assert {len(digests) for digests in digests_by_pair.values()} == {6}
+    for case in cases:
+        expected = 2 if case.view in {ViewKind.TRACE_ONLY, ViewKind.OWNER_PROBE} else 1
+        assert assignments_by_digest[case.evidence_digest] == expected
+
+
+def test_each_view_is_a_literal_projection_of_verified_receipts(
+    materials: tuple[VerifiedPairMaterial, ...],
+    evidence_views: Workspace100EvidenceViews,
+) -> None:
+    materials_by_pair = {material.pair_id: material for material in materials}
+    cases_by_digest = {case.evidence_digest: case for case in evidence_views.cases}
+    for assignment in evidence_views._assignments:
+        material = materials_by_pair[assignment.pair_id]
+        completion = next(
+            candidate
+            for candidate in material.completions
+            if candidate.episode_id == assignment.episode_id
+        )
+        case = cases_by_digest[assignment.evidence_digest]
+        evidence = case.envelope.evidence
+        baseline = completion.panel.receipt_for(())
+
+        assert evidence.registry_digest == material.manifest.digest
+        assert evidence.coverage_manifest_digest == material.manifest.coverage_digest
+        assert evidence.public_trace == baseline.artifact.public_trace
+        assert evidence.outcome is baseline.outcome
+        if assignment.view is ViewKind.TRACE_ONLY:
+            assert evidence.probes == ()
+            assert evidence.intervention_observations == ()
+        elif assignment.view is ViewKind.OWNER_PROBE:
+            owner = completion.probe_for("workspace_owner")
+            assert evidence.probes == (ProbeObservation(name=owner.name, value=owner.value),)
+            assert evidence.intervention_observations == ()
+        elif assignment.view is ViewKind.EPOCH_PROBE:
+            epoch_name = next(
+                name for name in material.manifest.probe_names if name != "workspace_owner"
+            )
+            epoch = completion.probe_for(epoch_name)
+            assert evidence.probes == (ProbeObservation(name=epoch.name, value=epoch.value),)
+            assert evidence.intervention_observations == ()
+        else:
+            refresh_atom = next(
+                atom.name for atom in material.manifest.atoms if atom.target == "environment"
+            )
+            receipt = completion.panel.receipt_for((refresh_atom,))
+            assert evidence.probes == ()
+            assert len(evidence.intervention_observations) == 1
+            observation = evidence.intervention_observations[0]
+            assert observation.interventions == receipt.interventions
+            assert observation.public_trace == receipt.artifact.public_trace
+            assert observation.outcome is receipt.outcome
+
+
+def test_evidence_roots_are_order_independent_and_frozen(
+    materials: tuple[VerifiedPairMaterial, ...],
+    evidence_views: Workspace100EvidenceViews,
+) -> None:
+    reversed_views = views_module._project_verified_materials(tuple(reversed(materials)))
+
+    assert reversed_views == evidence_views
+    assert evidence_views.assignment_root == _EXPECTED_ASSIGNMENT_ROOT
+    assert evidence_views.evidence_root == _EXPECTED_EVIDENCE_ROOT
+    assert evidence_views.projection_root == _EXPECTED_PROJECTION_ROOT
+
+
+def test_case_metadata_cannot_relabel_a_worker_request(
+    evidence_views: Workspace100EvidenceViews,
+) -> None:
+    trace_case = next(
+        case
+        for case in evidence_views.cases
+        if case.view is ViewKind.TRACE_ONLY and case.template_id is TemplateId.PUBLISH_DRAFT
+    )
+    first_assignment = evidence_views._assignments[0]
+
+    with pytest.raises(ValueError, match="owner-probe"):
+        replace(trace_case, view=ViewKind.OWNER_PROBE)
+    with pytest.raises(ValueError, match="split contradicts"):
+        replace(trace_case, split=Split.TEST)
+    with pytest.raises(ValueError, match="split contradicts"):
+        replace(first_assignment, split=Split.TEST)
+
+
+def test_assignment_routes_reject_episode_and_task_transplants(
+    evidence_views: Workspace100EvidenceViews,
+) -> None:
+    first = evidence_views._assignments[0]
+    other = next(
+        assignment
+        for assignment in evidence_views._assignments
+        if assignment.pair_id != first.pair_id
+    )
+    forged_episode = replace(first, episode_id=other.episode_id)
+    forged_task = replace(first, task_id=other.task_id)
+
+    for forged in (forged_episode, forged_task):
+        assignments = tuple(
+            sorted(
+                (
+                    forged if assignment is first else assignment
+                    for assignment in evidence_views._assignments
+                ),
+                key=views_module._assignment_sort_key,
+            )
+        )
+        with pytest.raises(ValueError, match=r"pair route|route or case"):
+            replace(evidence_views, _assignments=assignments)
+
+
+def test_completion_routes_reject_same_pair_twin_transposition(
+    evidence_views: Workspace100EvidenceViews,
+) -> None:
+    route = evidence_views._routes[0]
+    left_episode, right_episode = route.episode_ids
+    decisive_views = {ViewKind.EPOCH_PROBE, ViewKind.REFRESH_RECEIPT}
+    assignments = tuple(
+        sorted(
+            (
+                replace(candidate, episode_id=right_episode)
+                if candidate.episode_id == left_episode and candidate.view in decisive_views
+                else replace(candidate, episode_id=left_episode)
+                if candidate.episode_id == right_episode and candidate.view in decisive_views
+                else candidate
+                for candidate in evidence_views._assignments
+            ),
+            key=views_module._assignment_sort_key,
+        )
+    )
+
+    with pytest.raises(ValueError, match="completion route"):
+        replace(evidence_views, _assignments=assignments)
+
+
+def test_projection_rejects_a_routing_id_hidden_inside_hex_evidence(
+    evidence_views: Workspace100EvidenceViews,
+) -> None:
+    case = next(
+        candidate for candidate in evidence_views.cases if candidate.view is ViewKind.TRACE_ONLY
+    )
+    assignment = next(
+        candidate
+        for candidate in evidence_views._assignments
+        if candidate.evidence_digest == case.evidence_digest
+    )
+    route = next(
+        candidate for candidate in evidence_views._routes if candidate.pair_id == assignment.pair_id
+    )
+    forged_evidence = replace(
+        case.envelope.evidence,
+        public_trace=route.pair_id.encode(),
+    )
+    forged_case = replace(
+        case,
+        envelope=PublicEvidenceEnvelope(forged_evidence),
+    )
+    forged_cases = tuple(
+        sorted(
+            (forged_case if candidate is case else candidate for candidate in evidence_views.cases),
+            key=views_module._case_sort_key,
+        )
+    )
+    forged_assignments = tuple(
+        sorted(
+            (
+                replace(
+                    candidate,
+                    evidence_digest=forged_case.evidence_digest,
+                )
+                if candidate.evidence_digest == case.evidence_digest
+                else candidate
+                for candidate in evidence_views._assignments
+            ),
+            key=views_module._assignment_sort_key,
+        )
+    )
+    forged_completion_routes = tuple(
+        replace(
+            completion,
+            evidence_digests=tuple(
+                (
+                    view,
+                    forged_case.evidence_digest if digest == case.evidence_digest else digest,
+                )
+                for view, digest in completion.evidence_digests
+            ),
+        )
+        for completion in route.completions
+    )
+    forged_route = replace(
+        route,
+        completions=(
+            forged_completion_routes[0],
+            forged_completion_routes[1],
+        ),
+    )
+    forged_routes = tuple(
+        sorted(
+            (
+                forged_route if candidate is route else candidate
+                for candidate in evidence_views._routes
+            ),
+            key=views_module._route_sort_key,
+        )
+    )
+
+    with pytest.raises(ValueError, match="private routing value"):
+        replace(
+            evidence_views,
+            _routes=forged_routes,
+            _assignments=forged_assignments,
+            cases=forged_cases,
+        )
+
+
+def test_worker_requests_are_closed_id_free_and_recursively_label_free(
+    materials: tuple[VerifiedPairMaterial, ...],
+    evidence_views: Workspace100EvidenceViews,
+) -> None:
+    private_values = tuple(
+        value.encode()
+        for material in materials
+        for value in (
+            material.pair_id,
+            material.task_id,
+            *(completion.episode_id for completion in material.completions),
+            *material.manifest.candidate_commitments,
+            *(completion.panel.source_snapshot_digest for completion in material.completions),
+        )
+    )
+    requests = tuple(case.worker_bytes for case in evidence_views.cases)
+
+    assert len(requests) == _EVIDENCE_CASE_COUNT
+    assert len(set(requests)) == _EVIDENCE_CASE_COUNT
+    for request, case in zip(requests, evidence_views.cases, strict=True):
+        assert PublicEvidenceEnvelope.from_canonical_bytes(request) == case.envelope
+        assert all(identifier not in request for identifier in private_values)
+        for forbidden_field in (
+            b'"case_id"',
+            b'"evidence_digest"',
+            b'"episode_id"',
+            b'"pair_id"',
+            b'"split"',
+            b'"template_id"',
+            b'"view"',
+        ):
+            assert forbidden_field not in request
+        public_strings = tuple(_walk_public_strings(case.envelope.to_payload()))
+        assert not any(
+            private.decode() in value for value in public_strings for private in private_values
+        )
+        assert not any(
+            forbidden in value.casefold()
+            for value in public_strings
+            for forbidden in (
+                "causal_target",
+                "completion_side",
+                "current",
+                "environment",
+                "policy",
+                "resolver_aligned",
+                "selector_aligned",
+                "stale",
+                "target_label",
+            )
+        )
+
+
+def test_receipt_projection_uses_no_runtime_or_verifier_capability(
+    monkeypatch: pytest.MonkeyPatch,
+    materials: tuple[VerifiedPairMaterial, ...],
+    evidence_views: Workspace100EvidenceViews,
+) -> None:
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("projection crossed the verified-receipt boundary")
+
+    monkeypatch.setattr(views_module, "workspace100_pair_worlds", forbidden)
+    monkeypatch.setattr(views_module, "verify_source_panel", forbidden)
+    monkeypatch.setattr(views_module, "verify_source_probe", forbidden)
+
+    assert views_module._project_verified_materials(materials) == evidence_views
+
+
 def test_view_authoring_source_has_no_search_or_cached_panel_dependency() -> None:
     source = inspect.getsource(views_module)
 
@@ -229,3 +572,22 @@ def test_verifying_one_pair_does_not_import_the_search_oracle() -> None:
         capture_output=True,
         text=True,
     )
+
+
+def _walk_public_strings(value: object) -> Iterator[str]:
+    if type(value) is dict:
+        for key, nested in cast(dict[object, object], value).items():
+            yield str(key)
+            if str(key).endswith("_hex") and type(nested) is str:
+                try:
+                    decoded = bytes.fromhex(nested).decode()
+                except (UnicodeDecodeError, ValueError):
+                    pass
+                else:
+                    yield decoded
+            yield from _walk_public_strings(nested)
+    elif type(value) in {tuple, list}:
+        for nested in cast(tuple[object, ...] | list[object], value):
+            yield from _walk_public_strings(nested)
+    elif type(value) is str:
+        yield value
