@@ -5,6 +5,7 @@ from witnessgap.workspace100.generation import (
     GeneratedCompletion,
     GeneratedPair,
     Workspace100Corpus,
+    authored_completion_records,
     construction_matrix,
     generate_workspace100,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "TemplateRecord",
     "VariantRecord",
     "Workspace100Corpus",
+    "authored_completion_records",
     "construction_matrix",
     "generate_workspace100",
 ]

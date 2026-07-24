@@ -274,6 +274,35 @@ def generate_workspace100(seed: bytes) -> Workspace100Corpus:
     )
 
 
+def authored_completion_records(
+    template_id: TemplateId,
+    variant_id: str,
+) -> tuple[CompletionSourceRecord, CompletionSourceRecord]:
+    """Return the two exact source records admitted by the frozen catalog.
+
+    This lookup has no seed or salt input. Trusted decoders use it to reject a
+    structurally valid source that was not authored into Workspace-100.
+    """
+
+    if type(template_id) is not TemplateId:
+        raise TypeError("template_id must be an exact TemplateId")
+    if type(variant_id) is not str:
+        raise TypeError("variant_id must be an exact string")
+    validate_frozen_catalog(TEMPLATES, VARIANTS)
+    try:
+        template = next(record for record in TEMPLATES if record.template_id is template_id)
+        variant = next(
+            record
+            for record in VARIANTS
+            if record.template_id is template_id and record.variant_id == variant_id
+        )
+    except StopIteration as error:
+        raise KeyError(f"{template_id.value}/{variant_id}") from error
+    records = _completion_records(template, variant)
+    _validate_twin_construction(*records)
+    return records
+
+
 def construction_matrix(
     record: CompletionSourceRecord,
 ) -> tuple[str, str, str, str]:
