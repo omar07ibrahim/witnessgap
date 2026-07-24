@@ -4,8 +4,9 @@ Protocol ID: `workspace-100-v1`
 
 Status: frozen protocol with an implemented authored catalog, in-memory
 sealed-source generator, trusted runtime adapter, closed participant wire, and
-verified evidence-view projection and evaluator truth certificates. No
-materialized release directory, isolated worker harness, evaluated claim, or
+verified evidence-view projection, evaluator truth certificates, and a
+fresh-process transport for trusted built-in methods. No materialized release
+directory, third-party-code isolation backend, evaluated 300-case claim set, or
 benchmark result exists yet. A change to size, evidence views, scoring grain,
 metric formulas, or semantic contracts requires a new protocol ID.
 
@@ -319,10 +320,10 @@ reported as method-level verifier rejections.
 The release generator and evaluator must be capability-separated. A
 participant worker must start without the repository checkout, sealed artifact
 directory, or the full installed WitnessGap package and receive exactly one
-canonical `Evidence` record. Merely hiding the checkout is insufficient
-because the main package contains the authored catalog and generator. The
-worker cannot receive an explicit episode ID, pair ID, source opening,
-commitment salt, other view, unqueried receipt, or label.
+canonical `PublicEvidenceEnvelope` record. Merely hiding the checkout is
+insufficient because the main package contains the authored catalog and
+generator. The worker cannot receive an explicit episode ID, pair ID, source
+opening, commitment salt, other view, unqueried receipt, or label.
 
 The registry digest is necessarily stable across the six cases derived from
 one pair, and the coverage digest is stable within a template. The ID-free wire
@@ -330,8 +331,24 @@ is therefore linkable if multiple records reach one stateful process. A
 conforming launcher must create a fresh isolated worker for each single record
 and expose neither canonical case position nor parent metadata. Canonical
 `view → template → digest` ordering exists only for deterministic roots; it is
-not an execution schedule. The current repository does not yet implement or
-claim this isolation gate.
+not an execution schedule.
+
+The current local POSIX Python backend implements the one-record transport and
+fresh process lifecycle for reviewed built-in methods. It stages source in a
+new private cwd, constructs a closed environment, sends only the canonical
+evidence bytes, incrementally bounds both output streams, applies a monotonic
+wall timeout, and normalizes one canonical claim in the trusted parent. A
+release must configure one case-independent scratch root outside the checkout
+and release tree. Its canonical run record adds no execution-order or
+operating-system metadata. Participant-authored target and witness identifiers
+remain part of a syntactically valid claim so wrong predictions can be scored.
+
+That backend deliberately does not claim hostile-code containment. The worker
+retains the host UID, filesystem, network, and external shared-state
+capabilities. Release gate 16 remains open until a concrete external backend
+provides UID, mount, network, PID, resource, metadata-service, and cgroup-wide
+cleanup controls and passes the adversarial conformance suite described in
+[the worker boundary](worker-boundary.md).
 
 The deterministic release layout is:
 
