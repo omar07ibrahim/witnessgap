@@ -432,6 +432,29 @@ class PublicEvidenceCase:
 
 
 @dataclass(frozen=True, slots=True)
+class Workspace100ProjectionRoots:
+    """One validated snapshot of the three public projection roots."""
+
+    assignment_root: str
+    evidence_root: str
+    projection_root: str
+
+    def __post_init__(self) -> None:
+        for field, value in (
+            ("assignment_root", self.assignment_root),
+            ("evidence_root", self.evidence_root),
+            ("projection_root", self.projection_root),
+        ):
+            if not _is_sha256(value):
+                raise ValueError(f"projection {field} must be lowercase SHA-256")
+        if self.projection_root != _projection_root(
+            self.assignment_root,
+            self.evidence_root,
+        ):
+            raise ValueError("projection root contradicts assignment and evidence roots")
+
+
+@dataclass(frozen=True, slots=True)
 class Workspace100EvidenceViews:
     """Deterministic 400-to-300 projection in root order, never run order.
 
@@ -483,16 +506,43 @@ class Workspace100EvidenceViews:
         """Bind routing and evidence roots without defining execution order."""
 
         self.validate()
-        payload: dict[str, JsonValue] = {
-            "assignment_root": _assignment_root(self),
-            "evidence_root": _evidence_root(self),
-            "format": "witnessgap.workspace100-evidence-projection.v1",
-            "protocol_id": PROTOCOL_ID,
-        }
-        return canonical_digest(
-            "witnessgap.workspace100-evidence-projection.v1",
-            payload,
+        return _projection_root(
+            _assignment_root(self),
+            _evidence_root(self),
         )
+
+
+def workspace100_projection_roots(
+    views: Workspace100EvidenceViews,
+) -> Workspace100ProjectionRoots:
+    """Validate once and capture all roots without repeating the leak scan."""
+
+    if type(views) is not Workspace100EvidenceViews:
+        raise TypeError("projection roots require exact Workspace100EvidenceViews")
+    views.validate()
+    assignment_root = _assignment_root(views)
+    evidence_root = _evidence_root(views)
+    return Workspace100ProjectionRoots(
+        assignment_root=assignment_root,
+        evidence_root=evidence_root,
+        projection_root=_projection_root(assignment_root, evidence_root),
+    )
+
+
+def _projection_root(
+    assignment_root: str,
+    evidence_root: str,
+) -> str:
+    payload: dict[str, JsonValue] = {
+        "assignment_root": assignment_root,
+        "evidence_root": evidence_root,
+        "format": "witnessgap.workspace100-evidence-projection.v1",
+        "protocol_id": PROTOCOL_ID,
+    }
+    return canonical_digest(
+        "witnessgap.workspace100-evidence-projection.v1",
+        payload,
+    )
 
 
 def _assignment_root(views: Workspace100EvidenceViews) -> str:
