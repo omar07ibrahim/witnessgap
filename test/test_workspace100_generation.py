@@ -22,6 +22,7 @@ _TEMPLATE_COUNT = 5
 _PAIR_COUNT = 50
 _SOURCE_COUNT = 100
 _SHA256_HEX_LENGTH = 64
+_EXPECTED_CORPUS_ROOT = "01d062caee7878056e8965ebb7766552b38dd442b60ca64f3893fa83cd844a93"
 
 
 @pytest.fixture(scope="module")
@@ -58,6 +59,7 @@ def test_generation_is_byte_identical_for_one_seed(corpus: Workspace100Corpus) -
 
     assert repeated == corpus
     assert repeated.root == corpus.root
+    assert corpus.root == _EXPECTED_CORPUS_ROOT
     assert repeated.root_payload() == corpus.root_payload()
 
 
