@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="930" viewBox="0 0 1440 930" role="img" aria-labelledby="visual-title visual-description">
+  <title id="visual-title">Workspace-100 construction funnel</title>
+  <desc id="visual-description">Production constructors rebuild five templates, fifty variants and causal-twin pairs, one hundred completions, four hundred private evidence assignments, three hundred unique participant cases, and twelve hundred frozen baseline method-case runs.</desc>
+  <rect x="0" y="0" width="1440" height="930" fill="#08111f"/>
+  <text x="60" y="52" fill="#58d6c9" font-family="monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="2">WORKSPACE-100 / FROZEN PROTOCOL CARDINALITIES</text>
+  <text x="60" y="98" fill="#f4f7fb" font-family="monospace" font-size="34" font-weight="700" text-anchor="start" letter-spacing="0">From authored templates to 1,200 method-case runs</text>
+  <text x="60" y="132" fill="#afc2d8" font-family="monospace" font-size="18" font-weight="400" text-anchor="start" letter-spacing="0">Every number below is rebuilt from production corpus, projection, and baseline objects.</text>
+  <rect x="60" y="190" width="420" height="190" rx="18" fill="#111f33" stroke="#6eb7ff" stroke-width="2"/>
+  <text x="88" y="258" fill="#6eb7ff" font-family="monospace" font-size="42" font-weight="700" text-anchor="start" letter-spacing="0">5</text>
+  <text x="88" y="298" fill="#f4f7fb" font-family="monospace" font-size="21" font-weight="700" text-anchor="start" letter-spacing="0">templates</text>
+  <text x="88" y="338" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">x 10 authored variants</text>
+  <rect x="510" y="190" width="420" height="190" rx="18" fill="#111f33" stroke="#b8a1ff" stroke-width="2"/>
+  <text x="538" y="258" fill="#b8a1ff" font-family="monospace" font-size="42" font-weight="700" text-anchor="start" letter-spacing="0">50</text>
+  <text x="538" y="298" fill="#f4f7fb" font-family="monospace" font-size="21" font-weight="700" text-anchor="start" letter-spacing="0">variants = twin pairs</text>
+  <text x="538" y="338" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">one pair per authored variant</text>
+  <rect x="960" y="190" width="420" height="190" rx="18" fill="#111f33" stroke="#ffd166" stroke-width="2"/>
+  <text x="988" y="258" fill="#ffd166" font-family="monospace" font-size="42" font-weight="700" text-anchor="start" letter-spacing="0">100</text>
+  <text x="988" y="298" fill="#f4f7fb" font-family="monospace" font-size="21" font-weight="700" text-anchor="start" letter-spacing="0">sealed completions</text>
+  <text x="988" y="338" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">2 incompatible completions / pair</text>
+  <rect x="60" y="505" width="420" height="190" rx="18" fill="#111f33" stroke="#6eb7ff" stroke-width="2"/>
+  <text x="88" y="573" fill="#6eb7ff" font-family="monospace" font-size="42" font-weight="700" text-anchor="start" letter-spacing="0">400</text>
+  <text x="88" y="613" fill="#f4f7fb" font-family="monospace" font-size="21" font-weight="700" text-anchor="start" letter-spacing="0">private assignments</text>
+  <text x="88" y="653" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">100 episodes x 4 evidence views</text>
+  <rect x="510" y="505" width="420" height="190" rx="18" fill="#111f33" stroke="#58d6c9" stroke-width="2"/>
+  <text x="538" y="573" fill="#58d6c9" font-family="monospace" font-size="42" font-weight="700" text-anchor="start" letter-spacing="0">300</text>
+  <text x="538" y="613" fill="#f4f7fb" font-family="monospace" font-size="21" font-weight="700" text-anchor="start" letter-spacing="0">unique public cases</text>
+  <text x="538" y="653" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">deduplicated by complete evidence</text>
+  <rect x="960" y="505" width="420" height="190" rx="18" fill="#111f33" stroke="#82e39c" stroke-width="2"/>
+  <text x="988" y="573" fill="#82e39c" font-family="monospace" font-size="42" font-weight="700" text-anchor="start" letter-spacing="0">1,200</text>
+  <text x="988" y="613" fill="#f4f7fb" font-family="monospace" font-size="21" font-weight="700" text-anchor="start" letter-spacing="0">method-case runs</text>
+  <text x="988" y="653" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">4 frozen methods x 300</text>
+  <line x1="480" y1="285" x2="510" y2="285" stroke="#b8a1ff" stroke-width="3" stroke-linecap="round"/>
+  <polygon points="510,285 497,277 497,293" fill="#b8a1ff"/>
+  <text x="495" y="260" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="middle" letter-spacing="0">x10</text>
+  <line x1="930" y1="285" x2="960" y2="285" stroke="#ffd166" stroke-width="3" stroke-linecap="round"/>
+  <polygon points="960,285 947,277 947,293" fill="#ffd166"/>
+  <text x="945" y="260" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="middle" letter-spacing="0">x2</text>
+  <line x1="1170" y1="380" x2="270" y2="505" stroke="#6eb7ff" stroke-width="3" stroke-linecap="round"/>
+  <polygon points="270,505 283,497 283,513" fill="#6eb7ff"/>
+  <text x="720" y="435" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="middle" letter-spacing="0">x4 views per completion</text>
+  <line x1="480" y1="600" x2="510" y2="600" stroke="#58d6c9" stroke-width="3" stroke-linecap="round"/>
+  <polygon points="510,600 497,592 497,608" fill="#58d6c9"/>
+  <text x="495" y="576" fill="#afc2d8" font-family="monospace" font-size="13" font-weight="400" text-anchor="middle" letter-spacing="0">dedupe</text>
+  <line x1="930" y1="600" x2="960" y2="600" stroke="#82e39c" stroke-width="3" stroke-linecap="round"/>
+  <polygon points="960,600 947,592 947,608" fill="#82e39c"/>
+  <text x="945" y="576" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="middle" letter-spacing="0">x4</text>
+  <rect x="60" y="735" width="1320" height="80" rx="18" fill="#0e2630" stroke="#58d6c9" stroke-width="2"/>
+  <text x="90" y="769" fill="#58d6c9" font-family="monospace" font-size="13" font-weight="700" text-anchor="start" letter-spacing="0">FROZEN BASELINES</text>
+  <text x="90" y="799" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">always_unknown · forced_environment · refresh_success_only · refresh_outcome</text>
+  <line x1="60" y1="844" x2="1380" y2="844" stroke="#2d4665" stroke-width="2" stroke-linecap="round"/>
+  <rect x="60" y="862" width="170" height="42" rx="21" fill="#2b1d28" stroke="#ff7b86" stroke-width="2"/>
+  <text x="145" y="890" fill="#ffd7db" font-family="monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0">official: false</text>
+  <text x="250" y="878" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">source: workspace100.catalog · generation · views · baselines</text>
+  <text x="250" y="902" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">nonclaim: construction cardinalities only; not a public release or a performance result</text>
+</svg>

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1020" viewBox="0 0 1440 1020" role="img" aria-labelledby="visual-title visual-description">
+  <title id="visual-title">Workspace-100 worker lifecycle boundary</title>
+  <desc id="visual-description">The production local backend stages one reviewed Python program in a fresh private directory, launches a new process session with a closed environment and bounded pipes, parses one claim, and performs process-group cleanup. The exact release policy still records host UID filesystem access, unenforced network isolation, and hostile-code containment not established.</desc>
+  <rect x="0" y="0" width="1440" height="1020" fill="#08111f"/>
+  <text x="60" y="52" fill="#58d6c9" font-family="monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="2">WORKSPACE-100 / TRUSTED BUILT-INS ONLY</text>
+  <text x="60" y="98" fill="#f4f7fb" font-family="monospace" font-size="34" font-weight="700" text-anchor="start" letter-spacing="0">Fresh process lifecycle ≠ hostile-code sandbox</text>
+  <text x="60" y="132" fill="#afc2d8" font-family="monospace" font-size="18" font-weight="400" text-anchor="start" letter-spacing="0">Implemented controls reduce accidental coupling; the release policy states the remaining boundary.</text>
+  <rect x="60" y="185" width="350" height="425" rx="18" fill="#111f33" stroke="#6eb7ff" stroke-width="2"/>
+  <text x="88" y="226" fill="#6eb7ff" font-family="monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0">TRUSTED PARENT</text>
+  <text x="88" y="275" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">1 canonical evidence envelope</text>
+  <text x="88" y="306" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">↓ bounded stdin</text>
+  <text x="88" y="337" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0"></text>
+  <text x="88" y="368" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">monotonic deadline</text>
+  <text x="88" y="399" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">timeout  5,000 ms</text>
+  <text x="88" y="430" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">stdout   16,384 bytes</text>
+  <text x="88" y="461" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">stderr   65,536 bytes</text>
+  <text x="88" y="492" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0"></text>
+  <text x="88" y="523" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">1 closed claim parser</text>
+  <text x="88" y="554" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">normalized WorkerRunRecord</text>
+  <rect x="465" y="185" width="480" height="425" rx="18" fill="#0e2630" stroke="#58d6c9" stroke-width="2"/>
+  <text x="493" y="226" fill="#58d6c9" font-family="monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0">IMPLEMENTED PROCESS LIFECYCLE</text>
+  <text x="493" y="270" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">fresh TemporaryDirectory · mode 0700</text>
+  <text x="493" y="305" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">participant.py · mode 0400</text>
+  <text x="493" y="340" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">Python flags: -s -S -B -P</text>
+  <text x="493" y="375" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">shell=False · close_fds=True</text>
+  <text x="493" y="410" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">new process session</text>
+  <text x="493" y="445" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">closed 9-key child environment</text>
+  <text x="493" y="480" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">fresh cwd = HOME = TMPDIR</text>
+  <text x="493" y="515" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">bounded nonblocking pipes</text>
+  <text x="493" y="550" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">process-group termination + reap</text>
+  <line x1="410" y1="390" x2="465" y2="390" stroke="#58d6c9" stroke-width="3" stroke-linecap="round"/>
+  <polygon points="465,390 452,382 452,398" fill="#58d6c9"/>
+  <line x1="945" y1="390" x2="1000" y2="390" stroke="#58d6c9" stroke-width="3" stroke-linecap="round"/>
+  <polygon points="1000,390 987,382 987,398" fill="#58d6c9"/>
+  <rect x="1000" y="185" width="380" height="425" rx="18" fill="#111f33" stroke="#b8a1ff" stroke-width="2"/>
+  <text x="1028" y="226" fill="#b8a1ff" font-family="monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0">PARTICIPANT PROCESS</text>
+  <text x="1028" y="274" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">scope:</text>
+  <text x="1028" y="306" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">frozen_reviewed_builtins_only</text>
+  <text x="1028" y="338" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0"></text>
+  <text x="1028" y="370" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">process isolation:</text>
+  <text x="1028" y="402" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">process_group_lifecycle_only</text>
+  <text x="1028" y="434" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0"></text>
+  <text x="1028" y="466" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">one request → one response</text>
+  <text x="1028" y="498" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">method IDs and evaluator roots</text>
+  <text x="1028" y="530" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">remain parent-side</text>
+  <rect x="60" y="665" width="1320" height="225" rx="18" fill="#2b1d28" stroke="#ff7b86" stroke-width="2"/>
+  <text x="90" y="708" fill="#ff7b86" font-family="monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0">NOT ESTABLISHED — RELEASE GATE 16</text>
+  <text x="90" y="756" fill="#f4f7fb" font-family="monospace" font-size="23" font-weight="700" text-anchor="start" letter-spacing="0">hostile_code_containment = not_established</text>
+  <text x="90" y="802" fill="#ffd7db" font-family="monospace" font-size="17" font-weight="400" text-anchor="start" letter-spacing="0">filesystem_isolation = host_uid_access</text>
+  <text x="90" y="833" fill="#ffd7db" font-family="monospace" font-size="17" font-weight="400" text-anchor="start" letter-spacing="0">network_isolation    = not_enforced</text>
+  <text x="90" y="864" fill="#ffd7db" font-family="monospace" font-size="17" font-weight="400" text-anchor="start" letter-spacing="0">The child retains the parent OS user and accessible host/network capabilities.</text>
+  <line x1="60" y1="934" x2="1380" y2="934" stroke="#2d4665" stroke-width="2" stroke-linecap="round"/>
+  <rect x="60" y="952" width="170" height="42" rx="21" fill="#2b1d28" stroke="#ff7b86" stroke-width="2"/>
+  <text x="145" y="980" fill="#ffd7db" font-family="monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0">official: false</text>
+  <text x="250" y="968" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">source: workspace100.worker.LocalPythonProcessBackend · Workspace100IsolationPolicy</text>
+  <text x="250" y="992" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">nonclaim: lifecycle separation for reviewed built-ins; not safe execution of arbitrary code</text>
+</svg>

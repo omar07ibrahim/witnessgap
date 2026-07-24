@@ -1,0 +1,501 @@
+{
+  "format": "witnessgap.readme-visual-provenance.v1",
+  "generator": "tools/render_readme_visuals.py",
+  "official": false,
+  "renderer_version": 1,
+  "sources": [
+    {
+      "path": "src/witnessgap/identifiability.py",
+      "sha256": "68efac15163a52a6cc842ca79d4f75c60ec5a2ee50b6c0bbcfe6393e29bb2640"
+    },
+    {
+      "path": "src/witnessgap/oracle.py",
+      "sha256": "424f5ae19462fe4a3c820679917994a06224c38ae8797a801926cbe7b96e207e"
+    },
+    {
+      "path": "src/witnessgap/verifier.py",
+      "sha256": "eded83e8adddef8c3c3a09badce7c757f54fc5b08336a6929b1b0e072ede24f1"
+    },
+    {
+      "path": "src/witnessgap/workspace100/baselines.py",
+      "sha256": "77ac72d5e4614d9c83fd4b0f38739245453ab1d7c6d4f39c549123de6f3bd69d"
+    },
+    {
+      "path": "src/witnessgap/workspace100/catalog.py",
+      "sha256": "38bfa6a2ce1ab828d10b1d527fa8640139566feb5e8d7e2759c7e77395f054e2"
+    },
+    {
+      "path": "src/witnessgap/workspace100/evidence.py",
+      "sha256": "b2d2d1c42dcaeb1f1d5ee4e0c182d51de34a0677a5f6876277a9ae92fe73dcda"
+    },
+    {
+      "path": "src/witnessgap/workspace100/generation.py",
+      "sha256": "dc92b11254537ced17368feb277775d9a4b3a2676d452c7b3102c66d00029890"
+    },
+    {
+      "path": "src/witnessgap/workspace100/release.py",
+      "sha256": "6d4edb0347ae8ee4dbaa937ba095b7f1e8652b60e797fe10bb5c61d4255613ac"
+    },
+    {
+      "path": "src/witnessgap/workspace100/release_io.py",
+      "sha256": "8cd578ba60793fbafc4d4c2ad6c4a3bd7308bb86c8734a606c6272b9737c2d96"
+    },
+    {
+      "path": "src/witnessgap/workspace100/views.py",
+      "sha256": "db2b424ec95024d384185404485511b7303b216ea88432fc990dc437b7539b6f"
+    },
+    {
+      "path": "src/witnessgap/workspace100/worker.py",
+      "sha256": "852dd9a6d8a56fe6df5322495e6c173c740ee627b1dc6ad712fc9cd5bef12ba0"
+    },
+    {
+      "path": "src/witnessgap/worlds/workspace.py",
+      "sha256": "ed0717afa26a22c5bfec15791388396b6e4518409eee70b2c9012c29709bb922"
+    },
+    {
+      "path": "tools/render_readme_visuals.py",
+      "sha256": "fbd59f1ec2dbbbe6c58fb2a84f05e1483cdceff02545f369dd5f6a5116c0aa22"
+    }
+  ],
+  "visuals": [
+    {
+      "description": "The production smallest example has one failed public trace compatible with two sealed completions. Their minimal repairs target different causes, so the verifier returns not_identifiable. One separating probe refines either completion to a singleton attribution.",
+      "facts": {
+        "baseline_outcome": "failure",
+        "compatible_completions": 2,
+        "completions": [
+          {
+            "label": "sealed completion 1",
+            "minimal_witness": "repair_draft_selection",
+            "target": "policy"
+          },
+          {
+            "label": "sealed completion 2",
+            "minimal_witness": "refresh_draft_store",
+            "target": "environment"
+          }
+        ],
+        "intervention_receipts": 0,
+        "probes": 0,
+        "reason": "ambiguous_worlds",
+        "separating_probe": "draft_store_epoch",
+        "verdict": "not_identifiable"
+      },
+      "file": "causal-twins-flow.svg",
+      "nonclaims": [
+        "Finite committed completion family only.",
+        "No claim that the family exhausts production failure mechanisms.",
+        "Content digests are not signatures or runtime attestations."
+      ],
+      "official": false,
+      "sha256": "b9e476b610d59f2d29a5653d41f672654e399722202af974b3e72ebe8f9c61a0",
+      "source_paths": [
+        "src/witnessgap/identifiability.py",
+        "src/witnessgap/oracle.py",
+        "src/witnessgap/verifier.py",
+        "src/witnessgap/worlds/workspace.py"
+      ],
+      "title": "Causal twins: identical evidence, incompatible repairs"
+    },
+    {
+      "description": "All five verdict forms from the production VerdictKind enum. The Workspace-100 v1 participant claim schema admits only identified_singleton and not_identifiable; the other verdicts belong to the wider WitnessGap contract.",
+      "facts": {
+        "all_verdicts": [
+          "identified_singleton",
+          "identified_compound",
+          "alternative_minimal_repairs",
+          "effect_only",
+          "not_identifiable"
+        ],
+        "workspace100_v1_claim_kinds": [
+          "identified_singleton",
+          "not_identifiable"
+        ]
+      },
+      "file": "verdict-taxonomy.svg",
+      "nonclaims": [
+        "Workspace-100 v1 does not exercise every general WitnessGap verdict.",
+        "The taxonomy is a protocol contract, not a performance result."
+      ],
+      "official": false,
+      "sha256": "7268ae2b822a97a7d4284e07529bc33956adc618f60fa7af597b1d5866256ec9",
+      "source_paths": [
+        "src/witnessgap/identifiability.py",
+        "src/witnessgap/workspace100/evidence.py"
+      ],
+      "title": "WitnessGap verdict taxonomy"
+    },
+    {
+      "description": "Production constructors rebuild five templates, fifty variants and causal-twin pairs, one hundred completions, four hundred private evidence assignments, three hundred unique participant cases, and twelve hundred frozen baseline method-case runs.",
+      "facts": {
+        "assignments": 400,
+        "baseline_ids": [
+          "always_unknown",
+          "forced_environment",
+          "refresh_success_only",
+          "refresh_outcome"
+        ],
+        "completions": 100,
+        "method_case_runs": 1200,
+        "pairs": 50,
+        "public_cases": 300,
+        "template_ids": [
+          "publish_draft",
+          "invite_member",
+          "move_work_item",
+          "schedule_review",
+          "grant_access"
+        ],
+        "templates": 5,
+        "variants": 50,
+        "variants_per_template": 10,
+        "views": {
+          "epoch_probe": {
+            "cases": 100,
+            "intervention_atoms": [],
+            "intervention_counts": [
+              0
+            ],
+            "probe_counts": [
+              1
+            ],
+            "probe_names": [
+              "calendar_epoch",
+              "draft_store_epoch",
+              "lane_resolver_epoch",
+              "permission_catalog_epoch",
+              "role_catalog_epoch"
+            ]
+          },
+          "owner_probe": {
+            "cases": 50,
+            "intervention_atoms": [],
+            "intervention_counts": [
+              0
+            ],
+            "probe_counts": [
+              1
+            ],
+            "probe_names": [
+              "workspace_owner"
+            ]
+          },
+          "refresh_receipt": {
+            "cases": 100,
+            "intervention_atoms": [
+              "refresh_calendar_snapshot",
+              "refresh_draft_store",
+              "refresh_lane_resolver",
+              "refresh_permission_catalog",
+              "refresh_role_catalog"
+            ],
+            "intervention_counts": [
+              1
+            ],
+            "probe_counts": [
+              0
+            ],
+            "probe_names": []
+          },
+          "trace_only": {
+            "cases": 50,
+            "intervention_atoms": [],
+            "intervention_counts": [
+              0
+            ],
+            "probe_counts": [
+              0
+            ],
+            "probe_names": []
+          }
+        }
+      },
+      "file": "workspace100-funnel.svg",
+      "nonclaims": [
+        "Frozen synthetic protocol cardinalities, not statistical sample sizes.",
+        "No public benchmark release or method performance is asserted.",
+        "The 400 evidence assignments are distinct from 400 verifier receipts."
+      ],
+      "official": false,
+      "sha256": "de210d8322ccbba5b18e878612bb27ccf158517077a4555b95f8e772a76ef49b",
+      "source_paths": [
+        "src/witnessgap/workspace100/baselines.py",
+        "src/witnessgap/workspace100/catalog.py",
+        "src/witnessgap/workspace100/generation.py",
+        "src/witnessgap/workspace100/views.py"
+      ],
+      "title": "Workspace-100 construction funnel"
+    },
+    {
+      "description": "Four production evidence views always expose the failed baseline trace and outcome. Trace-only and owner-probe deduplicate to fifty cases each; epoch-probe and refresh-receipt remain completion-specific at one hundred each.",
+      "facts": {
+        "always_exposed": [
+          "public_trace",
+          "outcome"
+        ],
+        "assignments": 400,
+        "public_cases": 300,
+        "views": {
+          "epoch_probe": {
+            "cases": 100,
+            "intervention_atoms": [],
+            "intervention_counts": [
+              0
+            ],
+            "probe_counts": [
+              1
+            ],
+            "probe_names": [
+              "calendar_epoch",
+              "draft_store_epoch",
+              "lane_resolver_epoch",
+              "permission_catalog_epoch",
+              "role_catalog_epoch"
+            ]
+          },
+          "owner_probe": {
+            "cases": 50,
+            "intervention_atoms": [],
+            "intervention_counts": [
+              0
+            ],
+            "probe_counts": [
+              1
+            ],
+            "probe_names": [
+              "workspace_owner"
+            ]
+          },
+          "refresh_receipt": {
+            "cases": 100,
+            "intervention_atoms": [
+              "refresh_calendar_snapshot",
+              "refresh_draft_store",
+              "refresh_lane_resolver",
+              "refresh_permission_catalog",
+              "refresh_role_catalog"
+            ],
+            "intervention_counts": [
+              1
+            ],
+            "probe_counts": [
+              0
+            ],
+            "probe_names": []
+          },
+          "trace_only": {
+            "cases": 50,
+            "intervention_atoms": [],
+            "intervention_counts": [
+              0
+            ],
+            "probe_counts": [
+              0
+            ],
+            "probe_names": []
+          }
+        }
+      },
+      "file": "evidence-views.svg",
+      "nonclaims": [
+        "The owner probe is deliberately non-localizing.",
+        "Case denominators are construction invariants, not measured performance.",
+        "Private routing and truth labels are not participant-visible."
+      ],
+      "official": false,
+      "sha256": "b3bf5b3fdb0334820153e0451ae7e266f53d5c6a3e7854ec810d9f3fa03ef227",
+      "source_paths": [
+        "src/witnessgap/workspace100/evidence.py",
+        "src/witnessgap/workspace100/generation.py",
+        "src/witnessgap/workspace100/views.py"
+      ],
+      "title": "Workspace-100 participant evidence views"
+    },
+    {
+      "description": "The production release allowlist contains thirteen payload files plus one release-manifest file below workspace100/v1. Materialized files are mode 0444, directories are 0555, the release kind is pre-release reproducibility candidate, and hostile-code containment is not established.",
+      "facts": {
+        "directory": "workspace100/v1",
+        "directory_mode": "0555",
+        "file_mode": "0444",
+        "gate16_status": "not_established",
+        "manifest": "release-manifest.json",
+        "payload_count": 13,
+        "payloads": [
+          "protocol.json",
+          "baselines/baseline-set.json",
+          "authored/templates.json",
+          "authored/variants.json",
+          "sealed/generation.json",
+          "sealed/sources.jsonl",
+          "registries.jsonl",
+          "verified/trust-anchors.jsonl",
+          "verified/panels.jsonl",
+          "public/views.jsonl",
+          "truth/labels.jsonl",
+          "results/claims.json",
+          "results/report.json"
+        ],
+        "physical_file_count": 14,
+        "release_kind": "pre_release_reproducibility_candidate"
+      },
+      "file": "release-tree.svg",
+      "nonclaims": [
+        "The tree is a pre-release reproducibility candidate, not a published release.",
+        "POSIX modes are storage hygiene, not cryptographic immutability.",
+        "The manifest is not a signature, runtime attestation, or isolation proof."
+      ],
+      "official": false,
+      "sha256": "14f89c0cc8d048ef06c017c3ce190977302f1942eb9265ae7cf55db268945b19",
+      "source_paths": [
+        "src/witnessgap/workspace100/release.py",
+        "src/witnessgap/workspace100/release_io.py"
+      ],
+      "title": "Workspace-100 pre-release candidate tree"
+    },
+    {
+      "description": "All twenty-five fields of the production Workspace100ReleaseBindings dataclass are grouped into content roots, implementation identities, execution configuration, and an externally supplied trust-anchor set. File descriptors form an artifact tree root; the manifest payload forms a release root that must match an independently obtained expected root.",
+      "facts": {
+        "binding_count": 25,
+        "binding_order": [
+          "protocol_root",
+          "public_vocabulary_digest",
+          "baseline_set_root",
+          "template_catalog_digest",
+          "variant_catalog_digest",
+          "source_root",
+          "registry_root",
+          "panel_root",
+          "assignment_root",
+          "evidence_root",
+          "projection_root",
+          "truth_root",
+          "claim_set_root",
+          "report_root",
+          "adapter_implementation_digest",
+          "verifier_implementation_digest",
+          "worker_implementation_digest",
+          "claims_implementation_digest",
+          "scoring_implementation_digest",
+          "backend_implementation_digest",
+          "runtime_root",
+          "limits_root",
+          "isolation_policy_root",
+          "trust_anchor_root",
+          "release_builder_implementation_digest"
+        ],
+        "groups": {
+          "content_roots": [
+            "protocol_root",
+            "public_vocabulary_digest",
+            "baseline_set_root",
+            "template_catalog_digest",
+            "variant_catalog_digest",
+            "source_root",
+            "registry_root",
+            "panel_root",
+            "assignment_root",
+            "evidence_root",
+            "projection_root",
+            "truth_root",
+            "claim_set_root",
+            "report_root"
+          ],
+          "execution_configuration": [
+            "backend_implementation_digest",
+            "runtime_root",
+            "limits_root",
+            "isolation_policy_root"
+          ],
+          "external_anchor_set": [
+            "trust_anchor_root"
+          ],
+          "implementation_identities": [
+            "adapter_implementation_digest",
+            "verifier_implementation_digest",
+            "worker_implementation_digest",
+            "claims_implementation_digest",
+            "scoring_implementation_digest",
+            "release_builder_implementation_digest"
+          ]
+        },
+        "manifest_extra_inputs": [
+          "generation_provenance_root",
+          "13 exact file descriptors",
+          "execution_configuration"
+        ],
+        "verification_input": "independently authenticated expected_release_root"
+      },
+      "file": "release-binding-closure.svg",
+      "nonclaims": [
+        "Bindings and hashes provide deterministic integrity, not authenticity.",
+        "The expected release root must arrive through an independent authenticated channel.",
+        "No release root shown here is a published Workspace-100 release identity."
+      ],
+      "official": false,
+      "sha256": "98c43699b8673db941d49b3d949cb4984fb73aa89b45c57fb3844874d770efe8",
+      "source_paths": [
+        "src/witnessgap/workspace100/release.py"
+      ],
+      "title": "Workspace-100 release binding closure"
+    },
+    {
+      "description": "The production local backend stages one reviewed Python program in a fresh private directory, launches a new process session with a closed environment and bounded pipes, parses one claim, and performs process-group cleanup. The exact release policy still records host UID filesystem access, unenforced network isolation, and hostile-code containment not established.",
+      "facts": {
+        "environment_keys": [
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "PYTHONDONTWRITEBYTECODE",
+          "PYTHONHASHSEED",
+          "PYTHONNOUSERSITE",
+          "PYTHONUNBUFFERED",
+          "TMPDIR",
+          "TZ"
+        ],
+        "launcher_flags": [
+          "-s",
+          "-S",
+          "-B",
+          "-P"
+        ],
+        "limits": {
+          "stderr_bytes": 65536,
+          "stdout_bytes": 16384,
+          "timeout_ms": 5000
+        },
+        "participant_script": "participant.py",
+        "policy": {
+          "filesystem_isolation": "host_uid_access",
+          "format": "witnessgap.workspace100-isolation-policy.v1",
+          "hostile_code_containment": "not_established",
+          "isolation_policy_root": "a60de642a9873120be09401504762cb58628399366682da1685d1bd6f2f97315",
+          "network_isolation": "not_enforced",
+          "participant_scope": "frozen_reviewed_builtins_only",
+          "policy_id": "local_python_trusted_builtins_v1",
+          "process_isolation": "process_group_lifecycle_only",
+          "protocol_id": "workspace-100-v1"
+        },
+        "popen": {
+          "close_fds": true,
+          "shell": false,
+          "start_new_session": true
+        },
+        "scratch_directory_mode": "0700",
+        "script_mode": "0400"
+      },
+      "file": "isolation-boundary.svg",
+      "nonclaims": [
+        "The local backend is not a hostile-code sandbox.",
+        "The child retains the parent operating-system user, filesystem, and network access.",
+        "Release gate 16 remains not_established."
+      ],
+      "official": false,
+      "sha256": "9d513934d8a391b752285ad397905161bfac15a90be40a89b94eca4315ce1fc4",
+      "source_paths": [
+        "src/witnessgap/workspace100/release.py",
+        "src/witnessgap/workspace100/worker.py"
+      ],
+      "title": "Workspace-100 worker lifecycle boundary"
+    }
+  ]
+}

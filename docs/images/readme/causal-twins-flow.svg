@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="visual-title visual-description">
+  <title id="visual-title">Causal twins: identical evidence, incompatible repairs</title>
+  <desc id="visual-description">The production smallest example has one failed public trace compatible with two sealed completions. Their minimal repairs target different causes, so the verifier returns not_identifiable. One separating probe refines either completion to a singleton attribution.</desc>
+  <rect x="0" y="0" width="1440" height="900" fill="#08111f"/>
+  <text x="60" y="52" fill="#58d6c9" font-family="monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="2">WITNESSGAP / FINITE-FAMILY ATTRIBUTION</text>
+  <text x="60" y="98" fill="#f4f7fb" font-family="monospace" font-size="34" font-weight="700" text-anchor="start" letter-spacing="0">Same public failure. Different minimal causes.</text>
+  <text x="60" y="132" fill="#afc2d8" font-family="monospace" font-size="18" font-weight="400" text-anchor="start" letter-spacing="0">A point attribution is withheld until bounded evidence separates compatible worlds.</text>
+  <rect x="60" y="190" width="325" height="300" rx="18" fill="#152842" stroke="#6eb7ff" stroke-width="2"/>
+  <text x="88" y="230" fill="#6eb7ff" font-family="monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="1">PUBLIC EVIDENCE</text>
+  <text x="88" y="274" fill="#f4f7fb" font-family="monospace" font-size="23" font-weight="700" text-anchor="start" letter-spacing="0">byte-identical trace</text>
+  <text x="88" y="318" fill="#afc2d8" font-family="monospace" font-size="18" font-weight="400" text-anchor="start" letter-spacing="0">outcome: failure</text>
+  <text x="88" y="354" fill="#afc2d8" font-family="monospace" font-size="18" font-weight="400" text-anchor="start" letter-spacing="0">probes: 0</text>
+  <text x="88" y="390" fill="#afc2d8" font-family="monospace" font-size="18" font-weight="400" text-anchor="start" letter-spacing="0">intervention receipts: 0</text>
+  <text x="88" y="426" fill="#afc2d8" font-family="monospace" font-size="18" font-weight="400" text-anchor="start" letter-spacing="0">compatible completions: 2</text>
+  <rect x="510" y="170" width="380" height="205" rx="18" fill="#111f33" stroke="#ffd166" stroke-width="2"/>
+  <text x="540" y="208" fill="#ffd166" font-family="monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0">SEALED COMPLETION 1</text>
+  <text x="540" y="252" fill="#f4f7fb" font-family="monospace" font-size="21" font-weight="700" text-anchor="start" letter-spacing="0">hidden target: policy</text>
+  <text x="540" y="292" fill="#afc2d8" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">minimal witness:</text>
+  <text x="540" y="320" fill="#afc2d8" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">  repair_draft_selection</text>
+  <rect x="510" y="420" width="380" height="205" rx="18" fill="#111f33" stroke="#b8a1ff" stroke-width="2"/>
+  <text x="540" y="458" fill="#b8a1ff" font-family="monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0">SEALED COMPLETION 2</text>
+  <text x="540" y="502" fill="#f4f7fb" font-family="monospace" font-size="21" font-weight="700" text-anchor="start" letter-spacing="0">hidden target: environment</text>
+  <text x="540" y="542" fill="#afc2d8" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">minimal witness:</text>
+  <text x="540" y="570" fill="#afc2d8" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">  refresh_draft_store</text>
+  <line x1="385" y1="310" x2="510" y2="272" stroke="#ffd166" stroke-width="3" stroke-linecap="round"/>
+  <polygon points="510,272 497,264 497,280" fill="#ffd166"/>
+  <line x1="385" y1="360" x2="510" y2="522" stroke="#b8a1ff" stroke-width="3" stroke-linecap="round"/>
+  <polygon points="510,522 502,509 518,509" fill="#b8a1ff"/>
+  <rect x="1015" y="278" width="365" height="235" rx="18" fill="#261c2a" stroke="#ff7b86" stroke-width="2"/>
+  <text x="1045" y="320" fill="#ff7b86" font-family="monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0">VERIFIER VERDICT</text>
+  <text x="1045" y="367" fill="#f4f7fb" font-family="monospace" font-size="25" font-weight="700" text-anchor="start" letter-spacing="0">not_identifiable</text>
+  <text x="1045" y="408" fill="#afc2d8" font-family="monospace" font-size="17" font-weight="400" text-anchor="start" letter-spacing="0">reason: ambiguous_worlds</text>
+  <text x="1045" y="451" fill="#f4f7fb" font-family="monospace" font-size="17" font-weight="400" text-anchor="start" letter-spacing="0">No unique cause is licensed</text>
+  <text x="1045" y="479" fill="#f4f7fb" font-family="monospace" font-size="17" font-weight="400" text-anchor="start" letter-spacing="0">by the available evidence.</text>
+  <line x1="890" y1="272" x2="1015" y2="360" stroke="#ffd166" stroke-width="3" stroke-linecap="round"/>
+  <polygon points="1015,360 1002,352 1002,368" fill="#ffd166"/>
+  <line x1="890" y1="522" x2="1015" y2="430" stroke="#b8a1ff" stroke-width="3" stroke-linecap="round"/>
+  <polygon points="1015,430 1002,422 1002,438" fill="#b8a1ff"/>
+  <rect x="60" y="650" width="1320" height="120" rx="18" fill="#0e2630" stroke="#58d6c9" stroke-width="2"/>
+  <text x="90" y="690" fill="#58d6c9" font-family="monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0">REFINE WITH BOUNDED EVIDENCE</text>
+  <text x="90" y="731" fill="#f4f7fb" font-family="monospace" font-size="19" font-weight="700" text-anchor="start" letter-spacing="0">add separating probe: draft_store_epoch</text>
+  <line x1="560" y1="718" x2="690" y2="718" stroke="#58d6c9" stroke-width="3" stroke-linecap="round"/>
+  <polygon points="690,718 677,710 677,726" fill="#58d6c9"/>
+  <rect x="720" y="683" width="275" height="42" rx="21" fill="#163022" stroke="#82e39c" stroke-width="2"/>
+  <text x="857" y="711" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0">singleton: policy</text>
+  <rect x="1020" y="683" width="295" height="42" rx="21" fill="#211c37" stroke="#b8a1ff" stroke-width="2"/>
+  <text x="1167" y="711" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0">singleton: environment</text>
+  <line x1="60" y1="814" x2="1380" y2="814" stroke="#2d4665" stroke-width="2" stroke-linecap="round"/>
+  <rect x="60" y="832" width="170" height="42" rx="21" fill="#2b1d28" stroke="#ff7b86" stroke-width="2"/>
+  <text x="145" y="860" fill="#ffd7db" font-family="monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0">official: false</text>
+  <text x="250" y="848" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">source: identifiability.py · oracle.py · verifier.py · worlds/workspace.py</text>
+  <text x="250" y="872" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">nonclaim: valid only for the declared finite completion family; not production causality</text>
+</svg>
