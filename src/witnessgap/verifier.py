@@ -58,6 +58,12 @@ class VerifiableWorld(Protocol):
     @property
     def probe_contract_digest(self) -> str: ...
 
+    @property
+    def runner_contract_digest(self) -> str: ...
+
+    @property
+    def success_oracle_contract_digest(self) -> str: ...
+
     def probe(self, name: str) -> bytes: ...
 
     def fresh_runner(self) -> ExecutionRunner: ...
@@ -116,6 +122,8 @@ class VerifiedPanel:
     """Full independently derived panel for one sealed completion."""
 
     completion_commitment: str
+    runner_contract_digest: str
+    success_oracle_contract_digest: str
     atom_names: tuple[str, ...]
     receipts: tuple[VerifiedReceipt, ...]
     minimal_witnesses: tuple[Witness, ...]
@@ -135,6 +143,8 @@ class VerifiedPanel:
             "format": "witnessgap.verified-panel.v1",
             "minimal_witnesses": self.minimal_witnesses,
             "receipt_digests": tuple(receipt.digest for receipt in self.receipts),
+            "runner_contract_digest": self.runner_contract_digest,
+            "success_oracle_contract_digest": self.success_oracle_contract_digest,
             "target_family": self.target_family,
         }
         return canonical_digest("witnessgap.verified-panel.v1", payload)
@@ -312,6 +322,8 @@ def verify_world_panel(
     _verify_declaration(world, manifest)
     return VerifiedPanel(
         completion_commitment=world.completion_commitment,
+        runner_contract_digest=manifest.runner_contract_digest,
+        success_oracle_contract_digest=manifest.success_oracle_contract_digest,
         atom_names=atom_names,
         receipts=tuple(receipts),
         minimal_witnesses=minimal_witnesses,
@@ -389,6 +401,8 @@ def _verify_declaration(world: VerifiableWorld, manifest: RegistryManifest) -> N
         world.intervention_contract_digest,
         world.probe_names,
         world.probe_contract_digest,
+        world.runner_contract_digest,
+        world.success_oracle_contract_digest,
         world.declared_state_channels,
     )
     expected = (
@@ -398,6 +412,8 @@ def _verify_declaration(world: VerifiableWorld, manifest: RegistryManifest) -> N
         manifest.intervention_contract_digest,
         manifest.probe_names,
         manifest.probe_contract_digest,
+        manifest.runner_contract_digest,
+        manifest.success_oracle_contract_digest,
         manifest.declared_state_channels,
     )
     if declaration != expected:

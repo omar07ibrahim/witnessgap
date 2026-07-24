@@ -43,6 +43,14 @@ class ProbeWorld(FiniteWorld, Protocol):
         """Commitment to the shared probe semantics."""
 
     @property
+    def runner_contract_digest(self) -> str:
+        """Commitment to deterministic execution semantics."""
+
+    @property
+    def success_oracle_contract_digest(self) -> str:
+        """Commitment to terminal success semantics."""
+
+    @property
     def probe_names(self) -> tuple[str, ...]:
         """Complete names of probes that the benchmark may reveal."""
 
@@ -160,6 +168,8 @@ class RegistryManifest:
     intervention_contract_digest: str
     probe_names: tuple[str, ...]
     probe_contract_digest: str
+    runner_contract_digest: str
+    success_oracle_contract_digest: str
     declared_state_channels: tuple[str, ...]
     candidate_commitments: tuple[str, ...]
 
@@ -182,6 +192,8 @@ class RegistryManifest:
             "intervention_contract_digest": self.intervention_contract_digest,
             "probe_names": self.probe_names,
             "probe_contract_digest": self.probe_contract_digest,
+            "runner_contract_digest": self.runner_contract_digest,
+            "success_oracle_contract_digest": self.success_oracle_contract_digest,
             "task_id": self.task_id,
             "task_schema_id": self.task_schema_id,
         }
@@ -212,6 +224,8 @@ class CandidateRegistry:
             intervention_contract_digest=reference.intervention_contract_digest,
             probe_names=reference.probe_names,
             probe_contract_digest=reference.probe_contract_digest,
+            runner_contract_digest=reference.runner_contract_digest,
+            success_oracle_contract_digest=reference.success_oracle_contract_digest,
             declared_state_channels=reference.declared_state_channels,
             candidate_commitments=tuple(sorted(commitments)),
         )
@@ -399,9 +413,13 @@ def _validate_world_family(worlds: tuple[ProbeWorld, ...]) -> ProbeWorld:
             raise RegistryError(
                 f"{world.world_id}: completion commitment must be a lowercase SHA-256 digest"
             )
-        if not _is_sha256(world.intervention_contract_digest) or not _is_sha256(
-            world.probe_contract_digest
-        ):
+        contract_digests = (
+            world.intervention_contract_digest,
+            world.probe_contract_digest,
+            world.runner_contract_digest,
+            world.success_oracle_contract_digest,
+        )
+        if not all(_is_sha256(digest) for digest in contract_digests):
             raise RegistryError(
                 f"{world.world_id}: contract commitments must be lowercase SHA-256 digests"
             )
@@ -416,6 +434,8 @@ def _family_contract(world: ProbeWorld) -> tuple[object, ...]:
         world.intervention_contract_digest,
         world.probe_names,
         world.probe_contract_digest,
+        world.runner_contract_digest,
+        world.success_oracle_contract_digest,
         world.declared_state_channels,
     )
 

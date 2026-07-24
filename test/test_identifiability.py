@@ -166,6 +166,8 @@ class RegistryFixtureWorld:
     state_reads: tuple[str, ...] = ()
     intervention_contract_version: str = "fixture_interventions_v1"
     probe_contract_version: str = "fixture_probes_v1"
+    runner_contract_version: str = "fixture_runner_v1"
+    success_oracle_contract_version: str = "fixture_success_oracle_v1"
 
     @property
     def completion_commitment(self) -> str:
@@ -188,6 +190,20 @@ class RegistryFixtureWorld:
         return canonical_digest(
             "witnessgap.probe-contract.v1",
             {"version": self.probe_contract_version},
+        )
+
+    @property
+    def runner_contract_digest(self) -> str:
+        return canonical_digest(
+            "witnessgap.runner-contract.v1",
+            {"version": self.runner_contract_version},
+        )
+
+    @property
+    def success_oracle_contract_digest(self) -> str:
+        return canonical_digest(
+            "witnessgap.success-oracle-contract.v1",
+            {"version": self.success_oracle_contract_version},
         )
 
     @property
@@ -251,6 +267,14 @@ def test_registry_rejects_candidate_specific_contracts() -> None:
         replace(
             RegistryFixtureWorld("b"),
             probe_contract_version="fixture_probes_v2",
+        ),
+        replace(
+            RegistryFixtureWorld("b"),
+            runner_contract_version="fixture_runner_v2",
+        ),
+        replace(
+            RegistryFixtureWorld("b"),
+            success_oracle_contract_version="fixture_success_oracle_v2",
         ),
     )
 

@@ -180,6 +180,26 @@ class WorkspaceWorld:
         return canonical_digest("witnessgap.probe-contract.v1", payload)
 
     @property
+    def runner_contract_digest(self) -> str:
+        return canonical_digest(
+            "witnessgap.runner-contract.v1",
+            {
+                "format": "witnessgap.workspace-runner.v1",
+                "task_schema_id": self.task_schema_id,
+            },
+        )
+
+    @property
+    def success_oracle_contract_digest(self) -> str:
+        return canonical_digest(
+            "witnessgap.success-oracle-contract.v1",
+            {
+                "format": "witnessgap.workspace-success-oracle.v1",
+                "task_schema_id": self.task_schema_id,
+            },
+        )
+
+    @property
     def atoms(self) -> tuple[InterventionAtom, ...]:
         return _ATOMS
 

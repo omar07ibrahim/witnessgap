@@ -219,6 +219,14 @@ class ReusedRunnerWorld:
     def probe_contract_digest(self) -> str:
         return self.source.probe_contract_digest
 
+    @property
+    def runner_contract_digest(self) -> str:
+        return self.source.runner_contract_digest
+
+    @property
+    def success_oracle_contract_digest(self) -> str:
+        return self.source.success_oracle_contract_digest
+
     def probe(self, name: str) -> bytes:
         return self.source.probe(name)
 
