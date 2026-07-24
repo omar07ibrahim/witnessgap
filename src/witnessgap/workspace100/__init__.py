@@ -19,12 +19,22 @@ from witnessgap.workspace100.records import (
     TemplateRecord,
     VariantRecord,
 )
+from witnessgap.workspace100.runtime import (
+    WORKSPACE100_ADAPTER_ID,
+    WORKSPACE100_OWNER_PROBE,
+    Workspace100SourceAdapter,
+    Workspace100World,
+    workspace100_adapter_implementation_digest,
+    workspace100_pair_worlds,
+)
 
 __all__ = [
     "PROTOCOL_ID",
     "SOURCE_FORMAT_ID",
     "TEMPLATES",
     "VARIANTS",
+    "WORKSPACE100_ADAPTER_ID",
+    "WORKSPACE100_OWNER_PROBE",
     "CompletionSourceRecord",
     "GeneratedCompletion",
     "GeneratedPair",
@@ -34,7 +44,11 @@ __all__ = [
     "TemplateRecord",
     "VariantRecord",
     "Workspace100Corpus",
+    "Workspace100SourceAdapter",
+    "Workspace100World",
     "authored_completion_records",
     "construction_matrix",
     "generate_workspace100",
+    "workspace100_adapter_implementation_digest",
+    "workspace100_pair_worlds",
 ]

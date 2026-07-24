@@ -2,11 +2,11 @@
 
 Protocol ID: `workspace-100-v1`
 
-Status: frozen protocol with an implemented authored catalog and in-memory
-sealed-source generator. No trusted runtime adapter, release artifact corpus,
-evaluated claim, or benchmark result exists yet. A change to size, evidence
-views, scoring grain, metric formulas, or semantic contracts requires a new
-protocol ID.
+Status: frozen protocol with an implemented authored catalog, in-memory
+sealed-source generator, and trusted runtime adapter. No release artifact
+corpus, capability-separated evaluation, evaluated claim, or benchmark result
+exists yet. A change to size, evidence views, scoring grain, metric formulas,
+or semantic contracts requires a new protocol ID.
 
 Workspace-100 is the Stage B engineering slice for WitnessGap. It tests two
 claims inside one synthetic, finite family:
@@ -33,7 +33,9 @@ The slice contains:
 - 300 unique participant evidence cases.
 
 The independent verifier executes each subset from two fresh snapshots, so one
-verification generation performs 800 runner executions.
+complete 100-panel corpus pass performs 800 runner executions and 1,000 source
+decodes. These counts do not include independently re-verifying the panels for
+each of the 300 participant evidence cases.
 
 The implemented generator requires an explicit exact 32-byte seed. HMAC-SHA256
 derives one salt from each canonical source under a versioned domain; no
@@ -42,6 +44,13 @@ generation. The seed changes salts, commitments, pair IDs, episode IDs, and the
 corpus root, but not the 100 source byte strings. Sources inside a pair are
 ordered by commitment. The generator writes no release artifacts and creates no
 attribution labels or results.
+
+The trusted adapter performs a closed canonical parse and then requires exact
+membership in the two authored source records for that template and variant.
+It cannot prove salt provenance from one source opening alone. A release
+builder must therefore regenerate all sources from its explicit seed and compare
+the complete corpus root; accepting an arbitrarily assembled in-memory corpus
+is not a provenance check.
 
 Trace-only and owner-probe evidence is byte-identical between the two
 completions of a pair. Each is therefore scored once at pair grain: 50
@@ -256,9 +265,12 @@ reported as method-level verifier rejections.
 ## 9. Evaluation isolation and artifacts
 
 The generator and evaluator are capability-separated. A participant worker is
-started without the repository checkout or sealed artifact directory and
-receives one canonical `Evidence` record. It cannot receive an episode ID, pair
-ID, source opening, commitment salt, other view, unqueried receipt, or label.
+started without the repository checkout, sealed artifact directory, or the
+full installed WitnessGap package and receives one canonical `Evidence`
+record. Merely hiding the checkout is insufficient because the main package
+contains the authored catalog and generator. The worker cannot receive an
+episode ID, pair ID, source opening, commitment salt, other view, unqueried
+receipt, or label.
 
 The deterministic release layout is:
 

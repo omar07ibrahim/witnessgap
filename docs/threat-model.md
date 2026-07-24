@@ -11,7 +11,7 @@ For the current vertical slice, a verifier operator trusts:
 - the Python interpreter and standard library used to run the release;
 - the installed WitnessGap verifier modules identified by the pinned verifier
   implementation digest;
-- the built-in Workspace adapter modules identified by the pinned adapter
+- the built-in Workspace and Workspace-100 adapter modules identified by their pinned adapter
   implementation digest;
 - an independently distributed trust-anchor record;
 - the procedure that keeps sealed sources and labels outside the participant
@@ -72,10 +72,12 @@ checked against the manifest before the adapter is invoked.
 
 The small repository fixture and the Workspace-100 authored catalog/generator
 expose sealed inputs for tests and reproducibility. Workspace-100 evaluation
-must not import them in the participant process. A capability-separated worker
-receives exactly one public evidence record and returns one claim. Sealed
-sources, pair membership, other views, unqueried receipts, and labels stay in a
-separate evaluator process.
+must not import them in the participant process. Removing the repository
+checkout is not enough: the full WitnessGap installation also exposes those
+modules. A capability-separated worker receives only its minimal participant
+API and exactly one public evidence record, then returns one claim. Sealed
+sources, package resources, pair membership, other views, unqueried receipts,
+and labels stay in a separate evaluator process.
 
 ## Explicit non-goals
 
