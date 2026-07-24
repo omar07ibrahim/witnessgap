@@ -170,6 +170,20 @@ def test_parent_passes_one_exact_envelope_without_routing_metadata() -> None:
         assert forbidden not in request
 
 
+def test_parent_rechecks_backend_output_bounds() -> None:
+    backend = _CaptureBackend(_UNKNOWN_CLAIM)
+
+    record = run_worker_once(
+        WorkerProgram("capture_method", _DIGEST_A),
+        _envelope(),
+        backend=cast(WorkerBackend, backend),
+        limits=WorkerLimits(stdout_bytes=1),
+    )
+
+    assert record.status is WorkerRunStatus.FAILED
+    assert record.failure is WorkerFailureKind.OUTPUT_LIMIT_EXCEEDED
+
+
 def test_worker_surface_has_no_batch_or_package_export() -> None:
     assert "run_worker_once" not in workspace100.__all__
     assert not hasattr(workspace100, "run_worker_once")

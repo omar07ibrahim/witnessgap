@@ -530,14 +530,23 @@ def _normalize_worker_exit(
     *,
     context: _RunContext,
 ) -> WorkerRunRecord:
-    if raw.kind is WorkerExitKind.TIMED_OUT:
-        return _failed_run_record(context, WorkerFailureKind.TIMED_OUT)
-    if raw.kind is WorkerExitKind.OUTPUT_LIMIT_EXCEEDED:
-        return _failed_run_record(context, WorkerFailureKind.OUTPUT_LIMIT_EXCEEDED)
-    if raw.returncode != 0:
-        return _failed_run_record(context, WorkerFailureKind.NONZERO_EXIT)
-    if not raw.stdout:
-        return _failed_run_record(context, WorkerFailureKind.EMPTY_OUTPUT)
+    if (
+        len(raw.stdout) > context.limits.stdout_bytes
+        or len(raw.stderr) > context.limits.stderr_bytes
+    ):
+        failure = WorkerFailureKind.OUTPUT_LIMIT_EXCEEDED
+    elif raw.kind is WorkerExitKind.TIMED_OUT:
+        failure = WorkerFailureKind.TIMED_OUT
+    elif raw.kind is WorkerExitKind.OUTPUT_LIMIT_EXCEEDED:
+        failure = WorkerFailureKind.OUTPUT_LIMIT_EXCEEDED
+    elif raw.returncode != 0:
+        failure = WorkerFailureKind.NONZERO_EXIT
+    elif not raw.stdout:
+        failure = WorkerFailureKind.EMPTY_OUTPUT
+    else:
+        failure = None
+    if failure is not None:
+        return _failed_run_record(context, failure)
     try:
         claim = ParticipantClaim.from_canonical_bytes(raw.stdout)
     except (TypeError, ValueError):
