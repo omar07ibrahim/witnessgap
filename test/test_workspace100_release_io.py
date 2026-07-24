@@ -97,6 +97,7 @@ def _release() -> Workspace100ReleaseDirectory:
         provenance_root,
         bindings.source_root,
         bindings.registry_root,
+        bindings.trust_anchor_root,
         bindings.panel_root,
         bindings.evidence_root,
         bindings.truth_root,

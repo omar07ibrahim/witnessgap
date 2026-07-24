@@ -38,7 +38,7 @@ from witnessgap.workspace100.worker import WorkerLimits
 _MAX_RELEASE_FILE_BYTES = 64 << 20
 _MAX_MANIFEST_BYTES = 1 << 20
 _SHA256_HEX_LENGTH = 64
-_EXPECTED_FILE_COUNT = 12
+_EXPECTED_FILE_COUNT = 13
 _READ_ONLY_FILE_MODE = 292
 _EXPECTED_RUNTIME_ROOT = (
     "ba8583aed90db031b47fe04c3e544c85f36b13fd161cd0f8f23638d02912f53d"
@@ -50,10 +50,10 @@ _EXPECTED_EXECUTION_CONFIGURATION_ROOT = (
     "9a31f6808b034eaf6aae0eeb39e94443b43194fd07a0493a5f8f50e0a3a675a3"
 )
 _EXPECTED_ARTIFACT_TREE_ROOT = (
-    "d1d85a4f597996c0c75623f1750bcac7a98027321d25d8fee707dba17e51b342"
+    "2677269f20d742160417e939e08971a37531f5359aa701bd82d35e13030b5cbf"
 )
 _EXPECTED_RELEASE_ROOT = (
-    "dc594eaf5e3021e4fa66459df6c6598017a9372bd428b60bf71a94fab131412b"
+    "537599af6d21699bbe125419ed6044c5250fa4b3b765ad961ebe1d8f0b633ade"
 )
 
 
@@ -151,6 +151,7 @@ def _semantic_roots(
         generation_provenance_root,
         bindings.source_root,
         bindings.registry_root,
+        bindings.trust_anchor_root,
         bindings.panel_root,
         bindings.evidence_root,
         bindings.truth_root,
@@ -773,6 +774,38 @@ def test_manifest_rejects_file_semantic_root_substitution(
         *release_manifest.files[1:],
     )
     with pytest.raises(ValueError, match="semantic roots"):
+        replace(release_manifest, files=files)
+
+
+def test_manifest_rejects_swapped_anchor_and_panel_semantic_roots(
+    release_manifest: Workspace100ReleaseManifest,
+) -> None:
+    anchor_index = RELEASE_PAYLOAD_PATHS.index(
+        "verified/trust-anchors.jsonl"
+    )
+    panel_index = RELEASE_PAYLOAD_PATHS.index("verified/panels.jsonl")
+    files = list(release_manifest.files)
+    anchor = files[anchor_index]
+    panel = files[panel_index]
+    files[anchor_index] = replace(anchor, semantic_root=panel.semantic_root)
+    files[panel_index] = replace(panel, semantic_root=anchor.semantic_root)
+
+    with pytest.raises(ValueError, match="semantic roots"):
+        replace(release_manifest, files=tuple(files))
+
+
+def test_manifest_rejects_missing_trust_anchor_artifact(
+    release_manifest: Workspace100ReleaseManifest,
+) -> None:
+    anchor_index = RELEASE_PAYLOAD_PATHS.index(
+        "verified/trust-anchors.jsonl"
+    )
+    files = (
+        *release_manifest.files[:anchor_index],
+        *release_manifest.files[anchor_index + 1 :],
+    )
+
+    with pytest.raises(TypeError, match="exact payload file inventory"):
         replace(release_manifest, files=files)
 
 
