@@ -24,6 +24,11 @@ attribution. Public evidence binds a declared coverage-manifest digest; the
 ordered actual read log remains sealed and cannot distinguish otherwise
 compatible worlds.
 
+Every certified replay starts from exact canonical source bytes plus a
+32-byte commitment salt. The verifier recomputes both the salted completion
+commitment and the unsalted source-snapshot digest. It never accepts an
+executable world object from a claim.
+
 ## 2. Minimal repair witnesses
 
 For a world \(M\), let \(Y_M(S)\) be the terminal outcome after applying a
@@ -56,12 +61,14 @@ This creates new evidence \(e'\) and a refined compatibility set
 \(K(e') \subseteq K(e)\).
 
 The complete declared family is frozen in a registry manifest containing the
-task and schema identities, intervention and probe contract commitments,
-declared state channels, and every sealed completion commitment. Every evidence
-view and verdict carries the registry digest. Identifiability is always
-relative to this declared finite family: the digest prevents silent removal of
-a committed completion, but it cannot establish that the family exhausts all
-mechanisms in an arbitrary production system.
+task and source-schema identities, the internally resolved adapter ID, a digest
+of its installed implementation modules, intervention/probe/runner/artifact
+validator contracts, the recording-state contract, declared state channels,
+and every sealed completion commitment. The manifest has one closed canonical
+parser. Every evidence view and verdict carries the registry digest.
+Identifiability is always relative to this declared finite family: the digest
+prevents silent removal of a committed completion, but it cannot establish
+that the family exhausts all mechanisms in an arbitrary production system.
 
 ## 4. Verdicts
 
@@ -106,12 +113,13 @@ panel is exhausted before identification.
 
 A positive certificate contains:
 
-- canonical digests of the task, public trace, world schema, and replay state;
+- canonical digests of the task, public trace, world schema, exact source
+  snapshot, adapter implementation, and verifier implementation;
 - the applied intervention atoms;
 - the replay receipt and terminal outcome;
 - receipts for every strict subset;
 - the declared enumeration bound;
-- state-channel coverage for every downstream read.
+- a validator-checked recording-state log for every downstream execution read.
 
 An ambiguity certificate contains two sealed world completions that:
 
@@ -120,10 +128,26 @@ An ambiguity certificate contains two sealed world completions that:
 - produce different normalized minimal-witness target sets.
 
 Certificate verification is separate from witness search. The verifier replays
-every subset from a fresh source snapshot, evaluates terminal artifacts through
-the declared success oracle, and does not trust cached solver labels. Positive
-identification is a universal claim over every compatible committed completion;
-checking one successful witness and its subsets is not sufficient.
+every subset twice, decoding the immutable source again before each attempt. It
+also decodes probes twice. A trusted adapter validates the complete artifact:
+source snapshot, requested and recorded interventions, public trace, terminal
+state, state-read log, and outcome. The verifier does not trust cached solver
+labels. Positive identification is a universal claim over every compatible
+committed completion; checking one successful witness and its subsets is not
+sufficient.
+
+An external trust anchor pins the registry, adapter implementation, and expected
+verifier implementation digests. The final proof root commits that anchor, the
+evidence digest, all verified panel roots, the compatibility vector, and every
+field of the verdict. The serialized record has a closed parser and is checked
+against an independently supplied proof root. This is an integrity commitment,
+not a digital signature or proof that the finite family is complete.
+
+The Workspace adapter routes all post-intervention tool-execution reads through
+its recording-state capability, and the artifact validator independently
+recomputes the expected log. Intervention application itself remains part of
+the audited adapter semantics; the contract does not claim that Python can
+instrument arbitrary third-party state access.
 
 ## 6. Vertical-slice release gates
 
@@ -140,6 +164,10 @@ The first public result is blocked until all of the following hold:
 6. results report both decisive coverage and false certainty;
 7. documentation states that guarantees apply only to the declared finite
    world family.
+8. an externally stored trust anchor rejects a different verifier or adapter
+   implementation before source decoding;
+9. participant code runs outside the filesystem/import boundary containing
+   sealed sources and private labels.
 
 No benchmark accuracy, novelty, or production-causality claim exists before
 these gates pass.
