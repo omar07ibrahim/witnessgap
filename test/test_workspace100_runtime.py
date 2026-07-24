@@ -6,6 +6,7 @@ from typing import cast
 
 import pytest
 
+from witnessgap.adapters import TrustedAdapterError, resolve_trusted_adapter
 from witnessgap.canonical import JsonValue, canonical_json
 from witnessgap.identifiability import CandidateRegistry
 from witnessgap.model import ExecutionArtifact, Outcome, StateRead
@@ -54,6 +55,26 @@ def test_adapter_identity_binds_the_complete_runtime_bundle() -> None:
     assert adapter.source_format_id == "witnessgap.workspace100-source.v1"
     assert adapter.implementation_digest == workspace100_adapter_implementation_digest()
     assert len(adapter.implementation_digest) == _SHA256_HEX_LENGTH
+
+
+def test_closed_adapter_registry_resolves_only_the_installed_runtime() -> None:
+    adapter = Workspace100SourceAdapter()
+    resolved = resolve_trusted_adapter(
+        adapter.adapter_id,
+        expected_implementation_digest=adapter.implementation_digest,
+    )
+
+    assert type(resolved) is Workspace100SourceAdapter
+    with pytest.raises(TrustedAdapterError, match="implementation"):
+        resolve_trusted_adapter(
+            adapter.adapter_id,
+            expected_implementation_digest="0" * _SHA256_HEX_LENGTH,
+        )
+    with pytest.raises(TrustedAdapterError, match="not trusted"):
+        resolve_trusted_adapter(
+            "participant_supplied_adapter",
+            expected_implementation_digest=adapter.implementation_digest,
+        )
 
 
 def test_adapter_decodes_all_exact_authored_sources(
