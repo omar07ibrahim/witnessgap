@@ -23,6 +23,7 @@ from witnessgap.verifier import (
     verify_attribution_certificate,
     verify_registry_attribution,
     verify_source_panel,
+    verify_source_probe,
 )
 from witnessgap.worlds.workspace import (
     WorkspaceCause,
@@ -144,6 +145,34 @@ def test_verified_panel_contains_every_subset_and_raw_minimal_witness(
     assert panel.minimal_witnesses == (minimal_witness,)
     assert panel.target_family == target
     assert panel.receipt_for(()).outcome is Outcome.FAILURE
+
+
+def test_verified_probe_receipt_replays_two_fresh_source_decodes() -> None:
+    source = workspace_source(WorkspaceCause.ENVIRONMENT)
+    registry = CandidateRegistry.build(workspace_twins())
+
+    receipt = verify_source_probe(
+        source,
+        manifest=registry.manifest,
+        name="draft_store_epoch",
+    )
+    repeated = verify_source_probe(
+        source,
+        manifest=registry.manifest,
+        name="draft_store_epoch",
+    )
+
+    assert receipt.completion_commitment == source.completion_commitment
+    assert receipt.source_snapshot_digest == source.snapshot_digest
+    assert receipt.name == "draft_store_epoch"
+    assert receipt.value == world(WorkspaceCause.ENVIRONMENT).probe("draft_store_epoch")
+    assert receipt.digest == repeated.digest
+    with pytest.raises(VerificationError, match="not declared"):
+        verify_source_probe(
+            source,
+            manifest=registry.manifest,
+            name="hidden_target",
+        )
 
 
 def test_solver_cache_mutation_cannot_change_the_verified_result() -> None:

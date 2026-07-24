@@ -82,6 +82,14 @@ API and exactly one public evidence record, then returns one claim. Sealed
 sources, package resources, pair membership, other views, unqueried receipts,
 and labels stay in a separate evaluator process.
 
+Registry and coverage digests remain stable commitments, so records are
+linkable across cases even though the wire contains no routing ID. The worker
+boundary therefore requires one fresh isolated process per record: no batch,
+persistent worker, shared state, canonical-order signal, or parent case
+metadata may cross that boundary. The repository currently constructs and
+checks the ID-free evidence bytes but does not yet provide or claim the
+required isolation launcher.
+
 ## Explicit non-goals
 
 WitnessGap does not currently provide:

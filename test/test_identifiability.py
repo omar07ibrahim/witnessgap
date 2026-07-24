@@ -415,6 +415,54 @@ def test_evidence_rejects_tuple_subclasses_at_the_input_boundary() -> None:
         )
 
 
+def test_evidence_has_one_closed_self_binding_canonical_record() -> None:
+    registry = CandidateRegistry.build(workspace_twins())
+    evidence = registry.observe(
+        workspace_world(WorkspaceCause.POLICY).world_id,
+        probes=("draft_store_epoch",),
+        interventions=(("repair_draft_selection",),),
+    )
+    encoded = evidence.to_canonical_bytes()
+
+    parsed = Evidence.from_canonical_bytes(encoded)
+
+    assert parsed == evidence
+    assert parsed.digest == evidence.digest
+    assert parsed.to_canonical_bytes() == encoded
+    assert parsed.to_payload()["evidence_digest"] == evidence.digest
+
+
+def test_evidence_record_rejects_open_noncanonical_and_forged_payloads() -> None:
+    registry = CandidateRegistry.build(workspace_twins())
+    evidence = registry.observe(workspace_twins()[0].world_id)
+    payload = evidence.to_payload()
+    payload["untrusted_case_label"] = "environment"
+
+    with pytest.raises(ValueError, match="canonical JSON"):
+        Evidence.from_canonical_bytes(evidence.to_canonical_bytes().rstrip(b"\n"))
+    with pytest.raises(ValueError, match="unknown or missing"):
+        Evidence.from_canonical_bytes(canonical_json(payload))
+
+    forged = evidence.to_payload()
+    forged["public_trace_hex"] = b"forged trace\n".hex()
+    with pytest.raises(ValueError, match="digest contradicts"):
+        Evidence.from_canonical_bytes(canonical_json(forged))
+
+
+def test_evidence_record_rejects_nonlowercase_hex_and_unsupported_outcome() -> None:
+    registry = CandidateRegistry.build(workspace_twins())
+    evidence = registry.observe(workspace_twins()[0].world_id)
+    uppercase = evidence.to_payload()
+    uppercase["public_trace_hex"] = "AA"
+    unsupported = evidence.to_payload()
+    unsupported["outcome"] = "partial"
+
+    with pytest.raises(ValueError, match="lowercase even-length hex"):
+        Evidence.from_canonical_bytes(canonical_json(uppercase))
+    with pytest.raises(ValueError, match="unsupported outcome"):
+        Evidence.from_canonical_bytes(canonical_json(unsupported))
+
+
 def test_workspace_completion_ids_are_opaque() -> None:
     for world in workspace_twins():
         assert world.world_id.startswith("wgc_")
