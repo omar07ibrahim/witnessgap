@@ -127,16 +127,33 @@ public case bytes, witnesses, and certificates under pinned roots. Parsing
 checks those bindings without executing a sealed source; hashes provide
 integrity, not signatures, so a release consumer must pin the expected root.
 
+Workspace-100 also has a one-record fresh-process POSIX transport for trusted
+built-in methods. The parent sends exactly one canonical evidence envelope,
+incrementally bounds stdin/stdout/stderr under a monotonic deadline, accepts
+only one canonical claim, and deterministically encodes the observed outcome
+under method, caller-pinned runtime, backend, limit, request, and evidence
+digests. Each Python invocation gets a fresh cwd, home, tmp, environment, and
+process session without receiving an explicit case ID. The staged script
+argument contains no source-checkout path, but the absolute interpreter and
+scratch paths remain visible; a release operator must choose both outside the
+checkout and release tree.
+
+This lifecycle boundary is intentionally not described as a sandbox. Local
+workers retain the host filesystem, UID, network, and external shared-state
+capabilities, so arbitrary participant code still requires a separately
+pinned OS-level isolation backend before release gate 16 can pass.
+
 This is verified in-memory evidence and truth construction, not a benchmark
-result. The next release gate is a fresh-process capability harness,
-deterministic baselines and evaluator, exact metrics, and a seed-provenance
-release record. Participant code must not receive the full WitnessGap package
-because it contains the authored catalog, sealed-source generator, and
-evaluator truth implementation.
+result. The next engineering slice is deterministic baseline bundles and a
+300-case evaluator, followed by exact metrics, a seed-provenance release
+record, and the external isolation conformance backend. Participant code must
+not receive the full WitnessGap package because it contains the authored
+catalog, sealed-source generator, and evaluator truth implementation.
 
 See [the attribution contract](docs/attribution-contract.md) for the current
 formal boundary, [the threat model](docs/threat-model.md) for the trusted
-computing base, and
+computing base, [the worker boundary](docs/worker-boundary.md) for the
+one-record transport and remaining isolation contract, and
 [Workspace-100 protocol](docs/workspace-100-protocol.md) for the frozen Stage B
 slice.
 

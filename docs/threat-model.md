@@ -86,9 +86,23 @@ Registry and coverage digests remain stable commitments, so records are
 linkable across cases even though the wire contains no routing ID. The worker
 boundary therefore requires one fresh isolated process per record: no batch,
 persistent worker, shared state, canonical-order signal, or parent case
-metadata may cross that boundary. The repository currently constructs and
-checks the ID-free evidence bytes but does not yet provide or claim the
-required isolation launcher.
+metadata may cross that boundary.
+
+The repository now includes a fresh-process POSIX Python transport for trusted
+built-in methods. It stages a standalone source bundle, uses safe-path and
+site-disabled Python startup flags, constructs a closed environment, bounds
+all three pipes, and reaps the direct child after a monotonic timeout. Its
+backend root binds the harness implementation, launcher contract, and an
+explicitly caller-pinned runtime digest. The trusted parent records only stable
+outcome kinds and content digests.
+
+This lifecycle harness is not the required hostile-code isolation launcher.
+The child retains the host UID, filesystem, network, process namespace, and
+external shared-state channels. Process-group cleanup also cannot contain a
+hostile child that deliberately escapes the group. Arbitrary participant code
+therefore requires an independently pinned OS-level backend with mount, UID,
+network, PID, metadata-service, resource, and cgroup-wide cleanup controls.
+See [the worker boundary](worker-boundary.md) for the exact contract.
 
 Evaluator truth is a separate direct submodule and is not exported through the
 Workspace-100 runtime package surface. Its builder requires externally supplied
@@ -111,6 +125,6 @@ WitnessGap does not currently provide:
 
 - a signature or transparency log;
 - a proof that the declared finite family exhausts real mechanisms;
-- sandboxing for arbitrary third-party adapters;
+- sandboxing for arbitrary third-party participants or adapters;
 - instrumentation of arbitrary Python state reads;
 - a stochastic or production-agent causality guarantee.
