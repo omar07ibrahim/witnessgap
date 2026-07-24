@@ -5,10 +5,11 @@ Protocol ID: `workspace-100-v1`
 Status: frozen protocol with an implemented authored catalog, in-memory
 sealed-source generator, trusted runtime adapter, closed participant wire, and
 verified evidence-view projection, evaluator truth certificates, and a
-fresh-process transport for trusted built-in methods. No materialized release
-directory, third-party-code isolation backend, evaluated 300-case claim set, or
-benchmark result exists yet. A change to size, evidence views, scoring grain,
-metric formulas, or semantic contracts requires a new protocol ID.
+fresh-process transport with four pinned trusted baseline bundles. No
+materialized release directory, third-party-code isolation backend, evaluated
+300-case claim set, or benchmark result exists yet. A change to size, evidence
+views, scoring grain, metric formulas, or semantic contracts requires a new
+protocol ID.
 
 Workspace-100 is the Stage B engineering slice for WitnessGap. It tests two
 claims inside one synthetic, finite family:
@@ -258,23 +259,30 @@ floor.
 
 ### `forced_environment`
 
-Always returns `identified_singleton(environment)`. The balanced twin
-construction gives 50% latent target accuracy but 100% false certainty on
-ambiguous views.
+Always returns `identified_singleton(environment)` with the template's public
+refresh witness. The balanced twin construction is expected to give 50%
+target/witness exactness on identifiable cases and false certainty on every
+ambiguous case; these are not published metrics until the evaluator exists.
 
 ### `refresh_success_only`
 
 Returns `environment` only when the refresh receipt succeeds; otherwise
-returns `not_identifiable`. Expected decisive coverage is 50% with zero
-incorrect decisive verdicts on `refresh_receipt`.
+returns `not_identifiable`. Its construction expectation is 50/100 decisive
+claims on `refresh_receipt`, or 50/300 overall.
 
 ### `refresh_outcome`
 
 Returns `environment` on refresh success and `policy` on refresh failure.
-Expected decisive coverage is 100% on `refresh_receipt`.
+The failure branch submits the mapped policy repair witness, not the observed
+refresh atom. Its construction expectation is 100/100 decisive claims on
+`refresh_receipt`, or 100/300 overall.
 
-The verifier-derived method is reported separately from these baselines. No
-LLM judge or learned model is part of Workspace-100.
+All four implementations are pinned standalone source bundles. The policy
+repair atom is not present on the wire, so the narrow tool-to-witness mapping
+is explicitly declared public protocol knowledge in
+[the baseline bundle contract](baseline-bundles.md). The verifier-derived
+method is reported separately from these baselines. No LLM judge or learned
+model is part of Workspace-100.
 
 ## 8. Metrics
 
