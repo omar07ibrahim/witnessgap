@@ -4,10 +4,10 @@ Protocol ID: `workspace-100-v1`
 
 Status: frozen protocol with an implemented authored catalog, in-memory
 sealed-source generator, trusted runtime adapter, closed participant wire, and
-verified evidence-view projection. No release artifact corpus, isolated worker
-harness, evaluated claim, or benchmark result exists yet. A change to size,
-evidence views, scoring grain, metric formulas, or semantic contracts requires
-a new protocol ID.
+verified evidence-view projection and evaluator truth certificates. No
+materialized release directory, isolated worker harness, evaluated claim, or
+benchmark result exists yet. A change to size, evidence views, scoring grain,
+metric formulas, or semantic contracts requires a new protocol ID.
 
 Workspace-100 is the Stage B engineering slice for WitnessGap. It tests two
 claims inside one synthetic, finite family:
@@ -35,8 +35,13 @@ The slice contains:
 
 The independent verifier executes each subset from two fresh snapshots, so one
 complete 100-panel corpus pass performs 800 runner executions and 1,000 source
-decodes. These counts do not include independently re-verifying the panels for
-each of the 300 participant evidence cases.
+decodes. Truth authoring does not re-run that work once per case. For every
+pair, one verifier-owned batch reconstructs both panels and all requested
+probes, while a separate 100-panel pass independently derives the minimal
+witnesses stored in truth. Across the corpus this adds 1,600 runner executions,
+2,400 source decodes, and 400 fresh probe calls. The duplication is a
+deliberate trust boundary: no panel supplied by the evidence-view author is
+accepted as truth.
 
 The implemented generator requires an explicit exact 32-byte seed. HMAC-SHA256
 derives one salt from each canonical source under a versioned domain; no
@@ -190,6 +195,43 @@ The public case bytes contain none of that routing metadata. Assignment,
 evidence, and combined projection roots commit the two sides separately and
 together.
 
+### Evaluator truth
+
+Truth authoring accepts the exact corpus, the verified public projection, and
+exactly 50 external trust anchors indexed by registry digest. It never creates
+an anchor for itself. Each pair's six evidence records enter one
+invocation-local verifier batch; the verifier accepts source openings,
+manifest, anchor, and evidence only. It does not accept caller-created panels
+or a persistent cache. Minimal witnesses come from a separate fresh
+verification of all 100 sources.
+
+The resulting 300 private records contain:
+
+- 100 `not_identifiable(ambiguous_worlds)` certificates for `trace_only` and
+  `owner_probe`;
+- 200 `identified_singleton` certificates for `epoch_probe` and
+  `refresh_receipt`;
+- 100 environment and 100 policy singleton targets;
+- 300 unique proof roots and 150 compatibility-bound panel roots.
+
+Every truth case embeds its exact public evidence case and the private episode
+assignments that produced it. Structural validation reconstructs the original
+50 routes, 400 assignments, and 300 public cases through the same closed view
+schema, then requires the frozen assignment, evidence, and projection roots.
+This prevents a label-preserving `trace_only`/`owner_probe` or
+`epoch_probe`/`refresh_receipt` relabel, including a coordinated route rewrite.
+
+The canonical truth release stores route, certificate, and aggregate truth
+roots. Here `certificate_root` commits complete case-bound certificate records,
+including routing, public evidence, and witnesses; it is not a hash of bare
+certificate bytes alone. Its parser checks closed nested manifests, trust
+anchors, public cases, certificates, counts, ordering, and all stored roots
+without replaying source code. Parsing proves record integrity and release
+binding, not replay semantics anew. Re-establishing semantics requires the
+sealed sources and builder, and authenticity requires an expected truth root
+pinned outside the release. The truth module and record bytes never enter a
+participant worker.
+
 ## 6. Grouped split
 
 Pairs are indivisible. Templates, not records, define the split:
@@ -333,8 +375,8 @@ Generation is rejected unless all gates pass:
    capability and is covered by the declared manifest;
 10. search and independent verifier profiles agree on all episodes;
 11. no participant-visible ID contains a target or completion-side label;
-12. two clean generations have identical registry, evidence, panel, and report
-    roots.
+12. two clean generations have identical registry, evidence, panel, truth, and
+    report roots;
 13. exactly 300 unique evidence digests are scored with the 50/50/100/100
     per-view denominators;
 14. recursive case-folded leak scanning finds no target/side label in any
@@ -344,7 +386,7 @@ Generation is rejected unless all gates pass:
 16. a worker isolation test proves participant code cannot import or read
     sealed sources and labels;
 17. the release manifest pins protocol, source, registry, panel, evidence,
-    claim, report, adapter, verifier, and trust-anchor roots.
+    truth, claim, report, adapter, verifier, and trust-anchor roots.
 
 Expected view-level assertions:
 

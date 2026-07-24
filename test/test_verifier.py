@@ -6,22 +6,26 @@ from typing import cast
 
 import pytest
 
+from witnessgap import verifier as verifier_module
 from witnessgap.canonical import JsonValue, canonical_json
 from witnessgap.identifiability import (
     CandidateRegistry,
     Evidence,
     ProbeObservation,
+    RegistryManifest,
     VerdictKind,
 )
 from witnessgap.model import Outcome
-from witnessgap.source import SealedWorldSource
+from witnessgap.source import SealedWorldSource, WorldSourceAdapter
 from witnessgap.verifier import (
     VerificationError,
     VerifiedAttribution,
+    VerifiedPanel,
     evidence_digest,
     trust_anchor_for_manifest,
     verify_attribution_certificate,
     verify_registry_attribution,
+    verify_registry_attributions,
     verify_source_panel,
     verify_source_probe,
 )
@@ -32,6 +36,9 @@ from witnessgap.worlds.workspace import (
     workspace_sources,
     workspace_twins,
 )
+
+_PAIR_SOURCE_COUNT = 2
+_EXPECTED_BATCH_PROBE_CALLS = 8
 
 
 def world(cause: WorkspaceCause) -> WorkspaceWorld:
@@ -114,6 +121,121 @@ def test_independent_verifier_reconstructs_identified_views(
     assert verified.kind is VerdictKind.IDENTIFIED_SINGLETON
     assert verified.target_family == ((target,),)
     assert verified.compatible_completion_commitments == (world(cause).completion_commitment,)
+
+
+def test_batch_verifier_matches_scalar_certificates_in_input_order() -> None:
+    worlds = workspace_twins()
+    registry = CandidateRegistry.build(worlds)
+    environment = world(WorkspaceCause.ENVIRONMENT)
+    policy = world(WorkspaceCause.POLICY)
+    evidences = (
+        registry.observe(environment.world_id),
+        registry.observe(environment.world_id, probes=("workspace_owner",)),
+        registry.observe(environment.world_id, probes=("draft_store_epoch",)),
+        registry.observe(policy.world_id, probes=("draft_store_epoch",)),
+        registry.observe(
+            environment.world_id,
+            interventions=(("refresh_draft_store",),),
+        ),
+        registry.observe(
+            policy.world_id,
+            interventions=(("refresh_draft_store",),),
+        ),
+    )
+    anchor = trust_anchor_for_manifest(registry.manifest)
+
+    batch = verify_registry_attributions(
+        workspace_sources(),
+        manifest=registry.manifest,
+        trust_anchor=anchor,
+        evidences=evidences,
+    )
+    scalar = tuple(
+        verify_registry_attribution(
+            workspace_sources(),
+            manifest=registry.manifest,
+            trust_anchor=anchor,
+            evidence=evidence,
+        )
+        for evidence in evidences
+    )
+
+    assert batch == scalar
+    assert tuple(certificate.evidence_digest for certificate in batch) == tuple(
+        evidence.digest for evidence in evidences
+    )
+
+
+def test_batch_verifier_replays_panels_and_probes_once_per_invocation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    worlds = workspace_twins()
+    registry = CandidateRegistry.build(worlds)
+    environment = world(WorkspaceCause.ENVIRONMENT)
+    evidences = (
+        registry.observe(environment.world_id),
+        registry.observe(environment.world_id, probes=("workspace_owner",)),
+        registry.observe(environment.world_id, probes=("draft_store_epoch",)),
+    )
+    anchor = trust_anchor_for_manifest(registry.manifest)
+    panel_calls = 0
+    probe_calls = 0
+    original_panel = verifier_module._verify_source_panel
+    original_probe = verifier_module._probe_fresh
+
+    def counted_panel(
+        source: SealedWorldSource,
+        *,
+        adapter: WorldSourceAdapter,
+        manifest: RegistryManifest,
+    ) -> VerifiedPanel:
+        nonlocal panel_calls
+        panel_calls += 1
+        return original_panel(source, adapter=adapter, manifest=manifest)
+
+    def counted_probe(
+        source: SealedWorldSource,
+        adapter: WorldSourceAdapter,
+        manifest: RegistryManifest,
+        name: str,
+    ) -> bytes:
+        nonlocal probe_calls
+        probe_calls += 1
+        return original_probe(source, adapter, manifest, name)
+
+    monkeypatch.setattr(verifier_module, "_verify_source_panel", counted_panel)
+    monkeypatch.setattr(verifier_module, "_probe_fresh", counted_probe)
+
+    certificates = verify_registry_attributions(
+        workspace_sources(),
+        manifest=registry.manifest,
+        trust_anchor=anchor,
+        evidences=evidences,
+    )
+
+    assert len(certificates) == len(evidences)
+    assert panel_calls == _PAIR_SOURCE_COUNT
+    assert probe_calls == _EXPECTED_BATCH_PROBE_CALLS
+
+
+def test_batch_verifier_rejects_open_empty_and_oversized_inputs() -> None:
+    worlds = workspace_twins()
+    registry = CandidateRegistry.build(worlds)
+    evidence = registry.observe(worlds[0].world_id)
+    anchor = trust_anchor_for_manifest(registry.manifest)
+
+    for evidences in (
+        cast(tuple[Evidence, ...], [evidence]),
+        (),
+        tuple(evidence for _ in range(4097)),
+    ):
+        with pytest.raises(VerificationError, match="evidence batch"):
+            verify_registry_attributions(
+                workspace_sources(),
+                manifest=registry.manifest,
+                trust_anchor=anchor,
+                evidences=evidences,
+            )
 
 
 @pytest.mark.parametrize(
