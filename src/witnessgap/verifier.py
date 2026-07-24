@@ -103,6 +103,48 @@ class VerifiedReceipt:
 
 
 @dataclass(frozen=True, slots=True)
+class VerifiedProbeReceipt:
+    """One probe value reproduced through two fresh source decodes."""
+
+    completion_commitment: str
+    source_snapshot_digest: str
+    adapter_implementation_digest: str
+    probe_contract_digest: str
+    name: str
+    value: bytes
+
+    def __post_init__(self) -> None:
+        for field, digest in (
+            ("completion_commitment", self.completion_commitment),
+            ("source_snapshot_digest", self.source_snapshot_digest),
+            ("adapter_implementation_digest", self.adapter_implementation_digest),
+            ("probe_contract_digest", self.probe_contract_digest),
+        ):
+            if not _is_sha256(digest):
+                raise ValueError(f"{field} must be a lowercase SHA-256 digest")
+        if type(self.name) is not str or not _IDENTIFIER.fullmatch(self.name):
+            raise ValueError("probe receipt name must be an identifier")
+        if type(self.value) is not bytes:
+            raise TypeError("probe receipt value must be exact bytes")
+
+    @property
+    def digest(self) -> str:
+        payload: dict[str, JsonValue] = {
+            "adapter_implementation_digest": self.adapter_implementation_digest,
+            "completion_commitment": self.completion_commitment,
+            "format": "witnessgap.verified-probe-receipt.v1",
+            "name": self.name,
+            "probe_contract_digest": self.probe_contract_digest,
+            "source_snapshot_digest": self.source_snapshot_digest,
+            "value_digest": tagged_digest(
+                "witnessgap.probe-value.v1",
+                self.value,
+            ),
+        }
+        return canonical_digest("witnessgap.verified-probe-receipt.v1", payload)
+
+
+@dataclass(frozen=True, slots=True)
 class VerifiedPanel:
     """Full independently derived panel for one sealed completion."""
 
@@ -337,6 +379,43 @@ def verify_source_panel(
     except TrustedAdapterError as error:
         raise VerificationError(str(error)) from error
     return _verify_source_panel(source, adapter=adapter, manifest=manifest)
+
+
+def verify_source_probe(
+    source: SealedWorldSource,
+    *,
+    manifest: RegistryManifest,
+    name: str,
+) -> VerifiedProbeReceipt:
+    """Verify one declared probe through two independently decoded worlds."""
+
+    source = _normalize_source_opening(source)
+    manifest = _normalize_manifest(manifest)
+    if type(name) is not str or name not in manifest.probe_names:
+        raise VerificationError(f"probe is not declared by the manifest: {name!r}")
+    try:
+        adapter = resolve_trusted_adapter(
+            manifest.adapter_id,
+            expected_implementation_digest=manifest.adapter_implementation_digest,
+        )
+    except TrustedAdapterError as error:
+        raise VerificationError(str(error)) from error
+    if adapter.source_format_id != manifest.source_format_id:
+        raise VerificationError("trusted adapter source format differs from the manifest")
+    first = _probe_fresh(source, adapter, manifest, name)
+    second = _probe_fresh(source, adapter, manifest, name)
+    if first != second:
+        raise VerificationError(
+            f"{source.completion_commitment}: probe diverged across fresh source decodes"
+        )
+    return VerifiedProbeReceipt(
+        completion_commitment=source.completion_commitment,
+        source_snapshot_digest=source.snapshot_digest,
+        adapter_implementation_digest=manifest.adapter_implementation_digest,
+        probe_contract_digest=manifest.probe_contract_digest,
+        name=name,
+        value=first,
+    )
 
 
 def _verify_source_panel(
