@@ -68,7 +68,8 @@ The next release gate is a 100-episode Workspace slice with 50 exact twin pairs
 that remain `unknown` until an informative probe or replay result is exposed.
 
 See [the attribution contract](docs/attribution-contract.md) for the current
-formal boundary and release gates.
+formal boundary and [Workspace-100 protocol](docs/workspace-100-protocol.md) for
+the frozen Stage B slice.
 
 ## Related work
 
