@@ -9,15 +9,17 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Protocol, cast
 
-from witnessgap.canonical import JsonValue, canonical_digest, canonical_json
+from witnessgap.canonical import JsonValue, canonical_digest, canonical_json, tagged_digest
 from witnessgap.model import FiniteWorld, InterventionAtom, Outcome, TargetFamily, Witness
 
 if TYPE_CHECKING:
     from witnessgap.oracle import RepairPanel
 
 _REGISTRY_FORMAT = "witnessgap.registry.v2"
+_EVIDENCE_RECORD_FORMAT = "witnessgap.evidence-record.v1"
 _SHA256_HEX_LENGTH = 64
 _MAX_REGISTRY_ATOMS = 12
+_MAX_EVIDENCE_RECORD_BYTES = 1 << 20
 _IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _FORMAT_ID = re.compile(r"^[a-z][a-z0-9_.-]{0,127}$")
 
@@ -132,6 +134,160 @@ class Evidence:
         _validate_evidence_header(self)
         _validate_probe_observations(self.probes)
         _validate_intervention_observations(self.intervention_observations)
+
+    @property
+    def digest(self) -> str:
+        """Commit to exactly the evidence exposed to an attribution method."""
+
+        self.validate()
+        probes: tuple[JsonValue, ...] = tuple(
+            {
+                "name": observation.name,
+                "value_digest": tagged_digest(
+                    "witnessgap.probe-value.v1",
+                    observation.value,
+                ),
+            }
+            for observation in self.probes
+        )
+        interventions: tuple[JsonValue, ...] = tuple(
+            {
+                "interventions": observation.interventions,
+                "outcome": observation.outcome.value,
+                "public_trace_digest": tagged_digest(
+                    "witnessgap.public-trace.v1",
+                    observation.public_trace,
+                ),
+            }
+            for observation in self.intervention_observations
+        )
+        payload: dict[str, JsonValue] = {
+            "coverage_manifest_digest": self.coverage_manifest_digest,
+            "format": "witnessgap.evidence.v1",
+            "intervention_observations": interventions,
+            "outcome": self.outcome.value,
+            "probes": probes,
+            "public_trace_digest": tagged_digest(
+                "witnessgap.public-trace.v1",
+                self.public_trace,
+            ),
+            "registry_digest": self.registry_digest,
+        }
+        return canonical_digest("witnessgap.evidence.v1", payload)
+
+    def to_payload(self) -> dict[str, JsonValue]:
+        """Return the closed participant-facing evidence record."""
+
+        self.validate()
+        return {
+            "coverage_manifest_digest": self.coverage_manifest_digest,
+            "evidence_digest": self.digest,
+            "format": _EVIDENCE_RECORD_FORMAT,
+            "intervention_observations": tuple(
+                {
+                    "interventions": observation.interventions,
+                    "outcome": observation.outcome.value,
+                    "public_trace_hex": observation.public_trace.hex(),
+                }
+                for observation in self.intervention_observations
+            ),
+            "outcome": self.outcome.value,
+            "probes": tuple(
+                {
+                    "name": observation.name,
+                    "value_hex": observation.value.hex(),
+                }
+                for observation in self.probes
+            ),
+            "public_trace_hex": self.public_trace.hex(),
+            "registry_digest": self.registry_digest,
+        }
+
+    def to_canonical_bytes(self) -> bytes:
+        """Serialize one self-binding record for a participant worker."""
+
+        return canonical_json(self.to_payload())
+
+    @classmethod
+    def from_canonical_bytes(cls, payload: bytes) -> Evidence:
+        """Parse the exact public evidence schema and recompute its digest."""
+
+        if type(payload) is not bytes:
+            raise TypeError("evidence record payload must be exact bytes")
+        if len(payload) > _MAX_EVIDENCE_RECORD_BYTES:
+            raise ValueError(f"evidence record exceeds the {_MAX_EVIDENCE_RECORD_BYTES}-byte limit")
+        raw = _canonical_object(payload, label="evidence record")
+        expected_fields = {
+            "coverage_manifest_digest",
+            "evidence_digest",
+            "format",
+            "intervention_observations",
+            "outcome",
+            "probes",
+            "public_trace_hex",
+            "registry_digest",
+        }
+        if set(raw) != expected_fields:
+            raise ValueError("evidence record contains unknown or missing fields")
+        if raw["format"] != _EVIDENCE_RECORD_FORMAT:
+            raise ValueError("evidence record format is unsupported")
+        probes_raw = raw["probes"]
+        if type(probes_raw) is not list:
+            raise ValueError("evidence probes must be a JSON array")
+        probes: list[ProbeObservation] = []
+        for item in probes_raw:
+            if type(item) is not dict or set(item) != {"name", "value_hex"}:
+                raise ValueError("evidence probe contains unknown or missing fields")
+            probe = cast(dict[str, object], item)
+            probes.append(
+                ProbeObservation(
+                    name=_required_string(probe, "name"),
+                    value=_required_hex_bytes(probe, "value_hex"),
+                )
+            )
+        observations_raw = raw["intervention_observations"]
+        if type(observations_raw) is not list:
+            raise ValueError("evidence intervention observations must be a JSON array")
+        observations: list[InterventionObservation] = []
+        for item in observations_raw:
+            if type(item) is not dict or set(item) != {
+                "interventions",
+                "outcome",
+                "public_trace_hex",
+            }:
+                raise ValueError(
+                    "evidence intervention observation contains unknown or missing fields"
+                )
+            observation = cast(dict[str, object], item)
+            observations.append(
+                InterventionObservation(
+                    interventions=_required_string_tuple(
+                        observation,
+                        "interventions",
+                    ),
+                    public_trace=_required_hex_bytes(
+                        observation,
+                        "public_trace_hex",
+                    ),
+                    outcome=_required_outcome(observation, "outcome"),
+                )
+            )
+        evidence = cls(
+            registry_digest=_required_string(raw, "registry_digest"),
+            coverage_manifest_digest=_required_string(
+                raw,
+                "coverage_manifest_digest",
+            ),
+            public_trace=_required_hex_bytes(raw, "public_trace_hex"),
+            outcome=_required_outcome(raw, "outcome"),
+            probes=tuple(probes),
+            intervention_observations=tuple(observations),
+        )
+        if _required_string(raw, "evidence_digest") != evidence.digest:
+            raise ValueError("evidence record digest contradicts its contents")
+        if evidence.to_canonical_bytes() != payload:
+            raise ValueError("evidence record failed canonical round-trip")
+        return evidence
 
 
 def _validate_evidence_header(evidence: Evidence) -> None:
@@ -808,6 +964,24 @@ def _required_string_tuple(raw: dict[str, object], field: str) -> tuple[str, ...
     if type(value) is not list or any(type(item) is not str for item in value):
         raise RegistryError(f"registry field {field!r} must be an array of strings")
     return tuple(cast(list[str], value))
+
+
+def _required_hex_bytes(raw: dict[str, object], field: str) -> bytes:
+    value = _required_string(raw, field)
+    if (
+        len(value) % 2
+        or value != value.lower()
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise ValueError(f"evidence field {field!r} must be lowercase even-length hex")
+    return bytes.fromhex(value)
+
+
+def _required_outcome(raw: dict[str, object], field: str) -> Outcome:
+    try:
+        return Outcome(_required_string(raw, field))
+    except ValueError as error:
+        raise ValueError(f"evidence field {field!r} has an unsupported outcome") from error
 
 
 def _is_sha256(value: object) -> bool:

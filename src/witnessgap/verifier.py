@@ -432,40 +432,7 @@ def _verify_source_panel(
 def evidence_digest(evidence: Evidence) -> str:
     """Commit to exactly the evidence exposed to an attribution method."""
 
-    probes: tuple[JsonValue, ...] = tuple(
-        {
-            "name": observation.name,
-            "value_digest": tagged_digest(
-                "witnessgap.probe-value.v1",
-                observation.value,
-            ),
-        }
-        for observation in evidence.probes
-    )
-    interventions: tuple[JsonValue, ...] = tuple(
-        {
-            "interventions": observation.interventions,
-            "outcome": observation.outcome.value,
-            "public_trace_digest": tagged_digest(
-                "witnessgap.public-trace.v1",
-                observation.public_trace,
-            ),
-        }
-        for observation in evidence.intervention_observations
-    )
-    payload: dict[str, JsonValue] = {
-        "coverage_manifest_digest": evidence.coverage_manifest_digest,
-        "format": "witnessgap.evidence.v1",
-        "intervention_observations": interventions,
-        "outcome": evidence.outcome.value,
-        "probes": probes,
-        "public_trace_digest": tagged_digest(
-            "witnessgap.public-trace.v1",
-            evidence.public_trace,
-        ),
-        "registry_digest": evidence.registry_digest,
-    }
-    return canonical_digest("witnessgap.evidence.v1", payload)
+    return evidence.digest
 
 
 def _execute_fresh(
