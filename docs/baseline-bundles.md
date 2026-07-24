@@ -160,8 +160,10 @@ success and 50 failure. Therefore the source-level outcome matrix must be:
 
 These are construction assertions over emitted claim kinds, not measured
 quality metrics. False-certainty, exact-target, exact-witness, abstention, and
-coverage rates are published only after the separate evaluator joins a closed
-300-run claim set to pinned truth and recomputes an exact report.
+coverage rates can be published only after the future scorer/report builder
+joins the verified closed 4×300 (1,200-run) ClaimSet to independently pinned
+truth and recomputes an exact report. See
+[the ClaimSet contract](claim-set.md) for the implemented execution boundary.
 
 The local POSIX backend remains suitable only for these reviewed built-ins. It
 does not make arbitrary participant code safe; the external isolation gate in

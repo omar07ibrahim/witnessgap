@@ -13,6 +13,9 @@ For the current vertical slice, a verifier operator trusts:
   implementation digest;
 - the built-in Workspace and Workspace-100 adapter modules identified by their pinned adapter
   implementation digest;
+- the installed Workspace-100 claim evaluator/binder closure identified by its
+  pinned implementation digest;
+- the parent-selected worker backend, runtime identity, and exact limits;
 - an independently distributed trust-anchor record;
 - the procedure that keeps sealed sources and labels outside the participant
   process.
@@ -31,7 +34,8 @@ The verifier treats all of the following as untrusted:
 - evidence and nested observations;
 - source openings and commitment salts;
 - runner artifacts;
-- serialized certificate records.
+- serialized certificate records;
+- serialized Workspace-100 ClaimSet records.
 
 Boundary values must use exact built-in `bytes`, `str`, `tuple`, `list`, and
 `dict` types. Subclasses are rejected before hashing, equality checks, or
@@ -111,13 +115,24 @@ The serialized truth record embeds public cases only so it can reconstruct the
 frozen public roots; the complete record, private assignments, certificates,
 and witnesses remain evaluator-only capabilities.
 
+The ClaimSet binds complete worker records to the public projection, frozen
+baseline registry, backend identity, and exact limits. It contains no truth.
+Its structural parser checks only its closed schemas and internal roots. The
+externally bound loader additionally requires independently trusted public
+views, baseline set, backend digest, and limits; those expected values cannot
+come from the payload under review. Neither layer proves that the named backend
+actually executed the records.
+
 Canonical parsing verifies hashes and bindings but is not a signature,
 transparency proof, or substitute for semantic replay. A party able to rewrite
 every record can also compute new self-consistent roots. Release consumers must
-obtain the expected corpus, projection, adapter, verifier, trust-anchor, and
-truth roots through an independent authenticated channel. Replaying the
-builder from sealed openings is required when semantic verification, rather
-than structural release integrity, is the goal.
+obtain the expected corpus, baseline-set, assignment, evidence, projection,
+adapter, verifier, trust-anchor, truth, claim, evaluator/binder, backend,
+runtime, and limits roots through an independent authenticated channel. Fresh
+truth construction and worker replay can re-establish semantics and
+reproducibility, but cannot prove the historical origin of published runs.
+That requires an attestation, signature, or transparency mechanism outside the
+current implementation.
 
 ## Explicit non-goals
 
