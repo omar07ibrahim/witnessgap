@@ -152,22 +152,30 @@ baseline set publishes exact bytes for all four standalone programs and binds
 their ordered bundle roots under aggregate root
 `f8e5c3aadd426220d52d797cef178efc5aec51cd788092749cf46cf7edf53d4d`.
 The complete 4×300 construction matrix is exercised through 1,200 fresh
-worker processes, but it is not presented as a benchmark score before the
-evaluator and report roots exist.
+worker processes and assembled into one closed canonical ClaimSet. The
+execution evaluator validates the complete transient schedule before the first
+invocation, pins method, backend, request, and limit identities, preserves
+participant failures, and canonicalizes all 1,200 results independently of
+their storage input order. The ClaimSet contains no execution-order metadata.
+Under identical committed inputs, equal complete worker records for every key
+produce equal bytes and roots; an arbitrary trusted stateful backend is not
+assumed to be schedule-independent.
 
-This is verified in-memory evidence and truth construction, not a benchmark
-result. The next engineering slice is a case-order-independent 300-case
-evaluator and closed claim set, followed by exact metrics, a seed-provenance
-release record, and the external isolation conformance backend. Participant
-code must not receive the full WitnessGap package because it contains the
-authored catalog, sealed-source generator, and evaluator truth implementation.
+This remains verified in-memory construction and an execution artifact, not a
+benchmark result. No materialized release or score/report exists yet. The next
+engineering slice is a truth-joined scorer with exact rational metrics,
+followed by a seed-provenance release manifest and the external isolation
+conformance backend. Participant code must not receive the full WitnessGap
+package because it contains the authored catalog, sealed-source generator, and
+evaluator truth implementation.
 
 See [the attribution contract](docs/attribution-contract.md) for the current
 formal boundary, [the threat model](docs/threat-model.md) for the trusted
 computing base, [the worker boundary](docs/worker-boundary.md) for the
 one-record transport and remaining isolation contract,
 [the baseline bundle contract](docs/baseline-bundles.md) for the public
-method vocabulary, and
+method vocabulary, [the ClaimSet contract](docs/claim-set.md) for execution
+records and external verification, and
 [Workspace-100 protocol](docs/workspace-100-protocol.md) for the frozen Stage B
 slice.
 

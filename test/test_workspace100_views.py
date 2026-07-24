@@ -23,6 +23,7 @@ from witnessgap.workspace100.views import (
     ViewKind,
     Workspace100EvidenceViews,
     verify_workspace100_materials,
+    workspace100_projection_roots,
 )
 
 _SEED = bytes.fromhex("713d96c0fcadb930599f4f4370df3484766872ac406f1c26c5a360a996f29ec5")
@@ -323,6 +324,16 @@ def test_evidence_roots_are_order_independent_and_frozen(
     assert evidence_views.assignment_root == _EXPECTED_ASSIGNMENT_ROOT
     assert evidence_views.evidence_root == _EXPECTED_EVIDENCE_ROOT
     assert evidence_views.projection_root == _EXPECTED_PROJECTION_ROOT
+    roots = workspace100_projection_roots(evidence_views)
+    assert (
+        roots.assignment_root,
+        roots.evidence_root,
+        roots.projection_root,
+    ) == (
+        _EXPECTED_ASSIGNMENT_ROOT,
+        _EXPECTED_EVIDENCE_ROOT,
+        _EXPECTED_PROJECTION_ROOT,
+    )
 
 
 def test_case_metadata_cannot_relabel_a_worker_request(

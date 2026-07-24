@@ -5,9 +5,10 @@ Protocol ID: `workspace-100-v1`
 Status: frozen protocol with an implemented authored catalog, in-memory
 sealed-source generator, trusted runtime adapter, closed participant wire, and
 verified evidence-view projection, evaluator truth certificates, and a
-fresh-process transport with four pinned trusted baseline bundles. No
-materialized release directory, third-party-code isolation backend, evaluated
-300-case claim set, or benchmark result exists yet. A change to size, evidence
+fresh-process transport with four pinned trusted baseline bundles. A closed
+4×300 baseline execution evaluator and 1,200-run ClaimSet are also implemented.
+No materialized release directory, scorer/report builder, third-party-code
+isolation backend, or benchmark result exists yet. A change to size, evidence
 views, scoring grain, metric formulas, or semantic contracts requires a new
 protocol ID.
 
@@ -250,7 +251,7 @@ protected leaderboard.
 
 ## 7. Deterministic baselines
 
-The Stage B report includes:
+The future Stage B report must include:
 
 ### `always_unknown`
 
@@ -262,7 +263,9 @@ floor.
 Always returns `identified_singleton(environment)` with the template's public
 refresh witness. The balanced twin construction is expected to give 50%
 target/witness exactness on identifiable cases and false certainty on every
-ambiguous case; these are not published metrics until the evaluator exists.
+ambiguous case. These remain construction expectations until a verified
+ClaimSet is joined to pinned truth by the not-yet-implemented scorer/report
+builder.
 
 ### `refresh_success_only`
 
@@ -281,8 +284,8 @@ All four implementations are pinned standalone source bundles. The policy
 repair atom is not present on the wire, so the narrow tool-to-witness mapping
 is explicitly declared public protocol knowledge in
 [the baseline bundle contract](baseline-bundles.md). The verifier-derived
-method is reported separately from these baselines. No LLM judge or learned
-model is part of Workspace-100.
+method must be reported separately from these baselines. No LLM judge or
+learned model is part of Workspace-100.
 
 The vocabulary digest
 `62be02f2222129a1d72aaa5329d0f1e687f1014326e91cbbf7b5141973c651dd`
@@ -296,7 +299,7 @@ source bytes or either identity also requires a new protocol ID.
 
 ## 8. Metrics
 
-Metrics are computed per view and macro-averaged by template:
+The report must compute metrics per view and macro-average them by template:
 
 - decisive coverage;
 - false-certainty rate;
@@ -329,9 +332,9 @@ The exact formulas are:
 - `exact_target_family = valid_exact_family / identifiable_cases`;
 - `exact_minimal_witness = valid_exact_witness / identifiable_cases`.
 
-Every table publishes raw numerators and denominators, micro rates, and the
-template macro. Source-generation failures fail the release gate; they are not
-reported as method-level verifier rejections.
+Every table must publish raw numerators and denominators, micro rates, and the
+template macro. Source-generation failures must fail the release gate; they
+must not be reported as method-level verifier rejections.
 
 ## 9. Evaluation isolation and artifacts
 
@@ -361,6 +364,23 @@ and release tree. Its canonical run record adds no execution-order or
 operating-system metadata. Participant-authored target and witness identifiers
 remain part of a syntactically valid claim so wrong predictions can be scored.
 
+The implemented baseline evaluator accepts one caller-pinned execution plan
+and a transient permutation of the exact 1,200 method/evidence keys. It
+validates the full key set before the first invocation, binds every run to the
+frozen method registry, public projection, common backend identity, and exact
+limits, then stores records in canonical result order. Participant failures
+remain rooted runs; infrastructure or identity failures abort without a
+partial artifact. The schedule is not a release field and is neither
+serialized nor hashed.
+
+The closed artifact is canonical and contains no execution-order metadata. It
+does not claim that an arbitrary trusted backend is schedule-independent;
+under identical committed inputs, identical complete worker records for every
+key yield identical ClaimSet bytes and roots. Structural parsing alone does not
+authenticate its inputs. Untrusted bytes require the externally bound loader;
+the caller must separately compare the derived ClaimSet root with an expected
+root obtained independently. See [the ClaimSet contract](claim-set.md).
+
 That backend deliberately does not claim hostile-code containment. The worker
 retains the host UID, filesystem, network, and external shared-state
 capabilities. Release gate 16 remains open until a concrete external backend
@@ -381,7 +401,7 @@ workspace100/v1/
   verified/panels.jsonl
   public/views.jsonl
   truth/labels.jsonl
-  results/claims.jsonl
+  results/claims.json
   results/report.json
   release-manifest.json
 ```
@@ -400,13 +420,13 @@ worker. They may be published after evaluation for reproducibility; this
 remains an open engineering slice, not a hidden leaderboard.
 
 All files use closed canonical schemas, deterministic ordering, no timestamps,
-and no absolute paths. `report.json` is computed from immutable claim and truth
-records. Human-readable tables are rendered from it rather than written by
-hand.
+and no absolute paths. Once the scorer/report builder exists, `report.json`
+must be derived from immutable, externally verified ClaimSet and truth records.
+Human-readable tables must be rendered from it rather than written by hand.
 
 ## 10. Release gates
 
-Generation is rejected unless all gates pass:
+A public release is rejected unless all gates pass:
 
 1. exactly 100 episodes and 50 pair groups exist;
 2. every pair has byte-identical baseline public evidence;
@@ -420,8 +440,11 @@ Generation is rejected unless all gates pass:
    capability and is covered by the declared manifest;
 10. search and independent verifier profiles agree on all episodes;
 11. no participant-visible ID contains a target or completion-side label;
-12. two clean generations have identical public-vocabulary, baseline-set,
-    registry, evidence, panel, truth, and report roots;
+12. two clean generation/evaluation passes under the same pinned execution
+    configuration have identical public-vocabulary, baseline-set, registry,
+    assignment, evidence, projection, panel, truth, claim, and report roots;
+    the frozen deterministic baselines also produce the same ClaimSet under at
+    least two valid transient schedules;
 13. exactly 300 unique evidence digests are scored with the 50/50/100/100
     per-view denominators;
 14. recursive case-folded leak scanning finds no target/side label in any
@@ -431,13 +454,19 @@ Generation is rejected unless all gates pass:
 16. a worker isolation test proves participant code cannot import or read
     sealed sources and labels;
 17. the release manifest pins protocol, public-vocabulary, baseline-set,
-    source, registry, panel, evidence, truth, claim, report, adapter, verifier,
-    worker, backend, runtime, and trust-anchor roots;
+    source, registry, panel, assignment, evidence, projection, truth, claim,
+    report, adapter, verifier, worker, claim-evaluator/binder, backend, runtime,
+    exact limits, isolation-policy, and trust-anchor roots;
 18. the claim-set method registry contains each of the four pinned
     `(method_id, program_implementation_digest)` pairs exactly once, every run
     references one registry identity, each identity has exactly 300 unique
-    evidence runs, and the closed claim set and report bind the aggregate
-    baseline-set root.
+    evidence runs, and the ClaimSet binds the aggregate baseline-set root and
+    public projection; the report additionally binds the exact ClaimSet root,
+    truth root, assignment/evidence/projection roots, and baseline-set root.
+
+The implemented ClaimSet establishes the execution half of gate 18. Gates 12,
+13, 16, and 17, plus the report-binding half of gate 18, remain open. Therefore
+no public Workspace-100 result exists yet.
 
 Expected view-level assertions:
 

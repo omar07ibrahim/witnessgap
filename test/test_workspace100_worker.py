@@ -35,6 +35,7 @@ from witnessgap.workspace100.worker import (
     WorkerRunStatus,
     python_worker_program_digest,
     run_worker_once,
+    workspace100_worker_request_digest,
 )
 from witnessgap.worlds.workspace import workspace_twins
 
@@ -42,7 +43,7 @@ _DIGEST_A = "a" * 64
 _DIGEST_B = "b" * 64
 _SHA256_HEX_LENGTH = 64
 _EXPECTED_WORKER_IMPLEMENTATION_DIGEST = (
-    "27fc8a9c48cd011ff6547ea2c2e9b889421d2e3742c4fff5e4470e90abc8ccc9"
+    "b924cc67ac79ec2efc2d97501aaa8f6634173c4e5f44f0234e1a9b46ff95dcb2"
 )
 _EXPECTED_STANDALONE_RUN_DIGEST = (
     "ace50175c3bdfb36a7a9af1000022e0d80b003d694a62a3c92422211e79aa635"
@@ -162,6 +163,34 @@ class _CaptureBackend:
         )
 
 
+class _MutatingBackend(_CaptureBackend):
+    def __init__(
+        self,
+        claim: ParticipantClaim,
+        envelope: PublicEvidenceEnvelope,
+    ) -> None:
+        super().__init__(claim)
+        self.envelope = envelope
+
+    def invoke(self, request: bytes, *, limits: WorkerLimits) -> RawWorkerExit:
+        object.__setattr__(
+            self.envelope.evidence,
+            "registry_digest",
+            "0" * _SHA256_HEX_LENGTH,
+        )
+        return super().invoke(request, limits=limits)
+
+
+class _LimitsMutatingBackend(_CaptureBackend):
+    def invoke(self, request: bytes, *, limits: WorkerLimits) -> RawWorkerExit:
+        object.__setattr__(
+            limits,
+            "timeout_ms",
+            limits.timeout_ms + 1,
+        )
+        return super().invoke(request, limits=limits)
+
+
 def test_parent_passes_one_exact_envelope_without_routing_metadata() -> None:
     envelope = _envelope()
     backend = _CaptureBackend(_UNKNOWN_CLAIM)
@@ -190,6 +219,47 @@ def test_parent_passes_one_exact_envelope_without_routing_metadata() -> None:
         b"view",
     ):
         assert forbidden not in request
+
+
+def test_backend_mutation_cannot_rewrite_recorded_request_identity() -> None:
+    envelope = _envelope()
+    expected_evidence_digest = envelope.evidence_digest
+    expected_request_digest = workspace100_worker_request_digest(envelope)
+    backend = _MutatingBackend(_UNKNOWN_CLAIM, envelope)
+
+    record = run_worker_once(
+        WorkerProgram("mutating_backend", _DIGEST_A),
+        envelope,
+        backend=cast(WorkerBackend, backend),
+    )
+
+    assert record.evidence_digest == expected_evidence_digest
+    assert record.request_digest == expected_request_digest
+    assert backend.calls[0][0] != envelope.to_canonical_bytes()
+
+
+def test_backend_cannot_rewrite_the_parent_pinned_limits() -> None:
+    timeout_ms = 321
+    limits = WorkerLimits(
+        timeout_ms=timeout_ms,
+        stdout_bytes=1_024,
+        stderr_bytes=12,
+    )
+    expected_limits_digest = limits.digest
+    backend = _LimitsMutatingBackend(_UNKNOWN_CLAIM)
+
+    record = run_worker_once(
+        WorkerProgram("limits_mutating_backend", _DIGEST_A),
+        _envelope(),
+        backend=cast(WorkerBackend, backend),
+        limits=limits,
+    )
+
+    assert limits.timeout_ms == timeout_ms
+    assert limits.digest == expected_limits_digest
+    assert record.limits_digest == expected_limits_digest
+    assert backend.calls[0][1] is not limits
+    assert backend.calls[0][1].timeout_ms == timeout_ms + 1
 
 
 def test_parent_rechecks_backend_output_bounds() -> None:
@@ -238,7 +308,7 @@ def test_local_worker_stages_source_and_accepts_one_canonical_claim(
     assert record.implementation_digest == backend.program_implementation_digest
     assert record.backend_implementation_digest == backend.implementation_digest
     assert record.evidence_digest == envelope.evidence_digest
-    assert len(record.request_digest) == _SHA256_HEX_LENGTH
+    assert record.request_digest == workspace100_worker_request_digest(envelope)
     assert program.implementation_digest == python_worker_program_digest(source)
 
 
@@ -564,6 +634,8 @@ def test_worker_run_record_rejects_incoherent_and_mutated_values() -> None:
 def test_worker_limits_are_integer_only_and_digest_bound(limits: WorkerLimits) -> None:
     assert len(limits.digest) == _SHA256_HEX_LENGTH
     assert limits.to_payload()["format"] == "witnessgap.workspace100-worker-limits.v1"
+    assert WorkerLimits.from_payload(limits.to_payload()) == limits
+    assert WorkerLimits.from_canonical_bytes(limits.to_canonical_bytes()) == limits
 
     with pytest.raises(ValueError, match="integer"):
         WorkerLimits(timeout_ms=cast(int, True))
@@ -571,6 +643,33 @@ def test_worker_limits_are_integer_only_and_digest_bound(limits: WorkerLimits) -
         WorkerLimits(stdout_bytes=0)
     with pytest.raises(ValueError, match="integer"):
         WorkerLimits(stderr_bytes=(1 << 16) + 1)
+
+    opened = limits.to_payload()
+    opened["case_id"] = "forged"
+    with pytest.raises(ValueError, match="unknown or missing"):
+        WorkerLimits.from_payload(opened)
+    with pytest.raises(ValueError, match="canonical"):
+        WorkerLimits.from_canonical_bytes(limits.to_canonical_bytes().rstrip())
+
+
+def test_worker_request_digest_revalidates_the_exact_envelope() -> None:
+    envelope = _envelope()
+    expected = workspace100_worker_request_digest(envelope)
+
+    assert expected == workspace100_worker_request_digest(
+        PublicEvidenceEnvelope.from_canonical_bytes(
+            envelope.to_canonical_bytes()
+        )
+    )
+    assert len(expected) == _SHA256_HEX_LENGTH
+
+    object.__setattr__(envelope.evidence, "registry_digest", "not-a-digest")
+    with pytest.raises(ValueError, match="lowercase SHA-256"):
+        workspace100_worker_request_digest(envelope)
+    with pytest.raises(TypeError, match="exact"):
+        workspace100_worker_request_digest(
+            cast(PublicEvidenceEnvelope, b"not-an-envelope")
+        )
 
 
 def test_worker_rejects_identity_mismatch_and_noncanonical_parent_values() -> None:

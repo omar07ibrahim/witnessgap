@@ -23,7 +23,9 @@ prevent offline evidence fingerprinting.
 
 `run_worker_once` validates and reserializes one exact
 `PublicEvidenceEnvelope`, calls one backend once, and stores a closed
-`WorkerRunRecord`. The record binds:
+`WorkerRunRecord`. It snapshots the caller-pinned limits before invocation,
+retains only their pre-call digest and output thresholds for normalization, and
+passes a separate canonical limits copy to the backend. The record binds:
 
 - the parent-configured method ID and participant implementation digest;
 - the worker-backend implementation digest, which for the local backend binds
@@ -36,8 +38,8 @@ prevent offline evidence fingerprinting.
 The parent adds no PID, timestamp, duration, cwd, argv, exit code, stderr,
 partial stdout, absolute path, or exception text to the canonical record.
 Participant-controlled target and witness identifiers remain verbatim inside
-an otherwise valid claim, including when they are wrong; the evaluator must
-score them rather than silently turn them into transport errors.
+an otherwise valid claim, including when they are wrong; the later scorer must
+classify them rather than silently turn them into transport errors.
 Infrastructure failures abort evaluation as `WorkerHarnessError`; they are not
 converted into participant abstentions.
 
@@ -53,6 +55,10 @@ Participant outcomes use this precedence:
 
 The parent checks stream sizes again even when a backend reports a successful
 exit. Raw child stderr never enters a rooted result.
+
+The complete evaluator-side assembly, failure-preservation, and external
+verification rules are specified in
+[the Workspace-100 ClaimSet contract](claim-set.md).
 
 ## Local trusted-method backend
 
@@ -142,4 +148,6 @@ caller remains responsible for obtaining it from a trustworthy build or image
 record. These values are integrity commitments, not signatures, interpreter
 attestations, or runtime-isolation proofs. A final release manifest must also
 publish the interpreter or container runtime identity and external isolation
-policy separately.
+policy separately. Likewise, a backend digest inside a ClaimSet is a
+commitment, not proof that the named backend executed or contained the
+participant.

@@ -44,6 +44,7 @@ _MAX_CLAIM_BYTES = 1 << 14
 _MAX_STDERR_BYTES = 1 << 16
 _MAX_PROGRAM_BYTES = 1 << 20
 _MAX_RUN_BYTES = 1 << 16
+_MAX_LIMITS_BYTES = 1 << 12
 _MAX_TIMEOUT_MS = 10 * 60 * 1_000
 _IO_CHUNK_BYTES = 1 << 14
 _REAP_TIMEOUT_SECONDS = 1.0
@@ -152,6 +153,59 @@ class WorkerLimits:
             "timeout_ms": self.timeout_ms,
         }
 
+    def to_canonical_bytes(self) -> bytes:
+        return canonical_json(self.to_payload())
+
+    @classmethod
+    def from_payload(cls, payload: object) -> WorkerLimits:
+        if type(payload) is not dict:
+            raise ValueError("worker limits must be an object")
+        raw = cast(dict[str, object], payload)
+        if set(raw) != {
+            "format",
+            "protocol_id",
+            "stderr_bytes",
+            "stdout_bytes",
+            "timeout_ms",
+        }:
+            raise ValueError("worker limits contain unknown or missing fields")
+        if raw["format"] != WORKER_LIMITS_FORMAT:
+            raise ValueError("worker limits format is unsupported")
+        if raw["protocol_id"] != PROTOCOL_ID:
+            raise ValueError("worker limits protocol is unsupported")
+        return cls(
+            timeout_ms=_required_bounded_integer(
+                raw,
+                "timeout_ms",
+                minimum=1,
+                maximum=_MAX_TIMEOUT_MS,
+            ),
+            stdout_bytes=_required_bounded_integer(
+                raw,
+                "stdout_bytes",
+                minimum=1,
+                maximum=_MAX_CLAIM_BYTES,
+            ),
+            stderr_bytes=_required_bounded_integer(
+                raw,
+                "stderr_bytes",
+                minimum=0,
+                maximum=_MAX_STDERR_BYTES,
+            ),
+        )
+
+    @classmethod
+    def from_canonical_bytes(cls, payload: bytes) -> WorkerLimits:
+        raw = _canonical_object(
+            payload,
+            label="worker limits",
+            maximum_bytes=_MAX_LIMITS_BYTES,
+        )
+        limits = cls.from_payload(raw)
+        if limits.to_canonical_bytes() != payload:
+            raise ValueError("worker limits failed canonical round-trip")
+        return limits
+
     @property
     def digest(self) -> str:
         return canonical_digest(WORKER_LIMITS_FORMAT, self.to_payload())
@@ -215,6 +269,19 @@ def python_worker_program_digest(program_source: bytes) -> str:
     if not program_source or len(program_source) > _MAX_PROGRAM_BYTES:
         raise ValueError("worker program_source exceeds its byte bounds")
     return tagged_digest(_PYTHON_PROGRAM_DOMAIN, program_source)
+
+
+def workspace100_worker_request_digest(
+    envelope: PublicEvidenceEnvelope,
+) -> str:
+    """Bind the exact canonical bytes sent to one Workspace-100 worker."""
+
+    if type(envelope) is not PublicEvidenceEnvelope:
+        raise TypeError("worker request envelope must be exact")
+    request = envelope.to_canonical_bytes()
+    if PublicEvidenceEnvelope.from_canonical_bytes(request) != envelope:
+        raise ValueError("worker request envelope changed during normalization")
+    return tagged_digest(_WORKER_REQUEST_DOMAIN, request)
 
 
 @dataclass(frozen=True, slots=True)
@@ -505,9 +572,11 @@ class WorkerRunRecord:
 class _RunContext:
     program: WorkerProgram
     backend_digest: str
-    limits: WorkerLimits
+    limits_digest: str
+    stdout_limit_bytes: int
+    stderr_limit_bytes: int
     envelope: PublicEvidenceEnvelope
-    request: bytes
+    request_digest: str
 
 
 def run_worker_once(
@@ -529,6 +598,12 @@ def run_worker_once(
     elif type(limits) is not WorkerLimits:
         raise TypeError("worker limits must be exact")
     limits.validate()
+    limits_snapshot = WorkerLimits.from_canonical_bytes(
+        limits.to_canonical_bytes()
+    )
+    backend_limits = WorkerLimits.from_canonical_bytes(
+        limits_snapshot.to_canonical_bytes()
+    )
 
     request = envelope.to_canonical_bytes()
     normalized = PublicEvidenceEnvelope.from_canonical_bytes(request)
@@ -545,19 +620,19 @@ def run_worker_once(
     backend_digest = backend.implementation_digest
     _require_digest(backend_digest, field="worker backend implementation_digest")
 
-    raw = backend.invoke(request, limits=limits)
+    context = _RunContext(
+        program=program,
+        backend_digest=backend_digest,
+        limits_digest=limits_snapshot.digest,
+        stdout_limit_bytes=limits_snapshot.stdout_bytes,
+        stderr_limit_bytes=limits_snapshot.stderr_bytes,
+        envelope=normalized,
+        request_digest=workspace100_worker_request_digest(normalized),
+    )
+    raw = backend.invoke(request, limits=backend_limits)
     if type(raw) is not RawWorkerExit:
         raise TypeError("worker backend must return an exact RawWorkerExit")
-    return _normalize_worker_exit(
-        raw,
-        context=_RunContext(
-            program=program,
-            backend_digest=backend_digest,
-            limits=limits,
-            envelope=envelope,
-            request=request,
-        ),
-    )
+    return _normalize_worker_exit(raw, context=context)
 
 
 def workspace100_worker_implementation_digest() -> str:
@@ -575,8 +650,8 @@ def _normalize_worker_exit(
     context: _RunContext,
 ) -> WorkerRunRecord:
     if (
-        len(raw.stdout) > context.limits.stdout_bytes
-        or len(raw.stderr) > context.limits.stderr_bytes
+        len(raw.stdout) > context.stdout_limit_bytes
+        or len(raw.stderr) > context.stderr_limit_bytes
     ):
         failure = WorkerFailureKind.OUTPUT_LIMIT_EXCEEDED
     elif raw.kind is WorkerExitKind.TIMED_OUT:
@@ -599,9 +674,9 @@ def _normalize_worker_exit(
         method_id=context.program.method_id,
         implementation_digest=context.program.implementation_digest,
         backend_implementation_digest=context.backend_digest,
-        limits_digest=context.limits.digest,
+        limits_digest=context.limits_digest,
         evidence_digest=context.envelope.evidence_digest,
-        request_digest=tagged_digest(_WORKER_REQUEST_DOMAIN, context.request),
+        request_digest=context.request_digest,
         status=WorkerRunStatus.CLAIMED,
         claim=claim,
     )
@@ -615,9 +690,9 @@ def _failed_run_record(
         method_id=context.program.method_id,
         implementation_digest=context.program.implementation_digest,
         backend_implementation_digest=context.backend_digest,
-        limits_digest=context.limits.digest,
+        limits_digest=context.limits_digest,
         evidence_digest=context.envelope.evidence_digest,
-        request_digest=tagged_digest(_WORKER_REQUEST_DOMAIN, context.request),
+        request_digest=context.request_digest,
         status=WorkerRunStatus.FAILED,
         failure=failure,
     )
@@ -885,6 +960,23 @@ def _required_string(raw: dict[str, object], field: str) -> str:
     if type(value) is not str:
         raise ValueError(f"{field} must be a string")
     return value
+
+
+def _required_bounded_integer(
+    raw: dict[str, object],
+    field: str,
+    *,
+    minimum: int,
+    maximum: int,
+) -> int:
+    value = raw.get(field)
+    _bounded_integer(
+        value,
+        field=f"worker {field}",
+        minimum=minimum,
+        maximum=maximum,
+    )
+    return cast(int, value)
 
 
 def _bounded_integer(
