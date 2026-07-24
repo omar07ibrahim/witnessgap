@@ -1,29 +1,56 @@
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
+import textwrap
+from dataclasses import replace
 from typing import cast
 
 import pytest
 
+from witnessgap.canonical import JsonValue, canonical_json
 from witnessgap.identifiability import UnknownReason, VerdictKind
-from witnessgap.model import TargetFamily, Witness
+from witnessgap.model import Outcome, TargetFamily, Witness
 from witnessgap.trust import VerificationTrustAnchor
 from witnessgap.verifier import trust_anchor_for_manifest
-from witnessgap.workspace100.claims import Workspace100ClaimRun
+from witnessgap.workspace100 import scoring as scoring_module
+from witnessgap.workspace100.baselines import (
+    PUBLIC_BASELINE_VOCABULARY,
+    BuiltinBaseline,
+    BuiltinBaselineSet,
+    PublicBaselineVocabulary,
+    builtin_baseline_set,
+)
+from witnessgap.workspace100.catalog import TEMPLATES
+from witnessgap.workspace100.claims import (
+    Workspace100ClaimRun,
+    Workspace100ClaimSet,
+    build_workspace100_claim_set,
+)
 from witnessgap.workspace100.evidence import ParticipantClaim
 from witnessgap.workspace100.generation import (
     Workspace100Corpus,
     generate_workspace100,
 )
+from witnessgap.workspace100.records import TemplateId
 from witnessgap.workspace100.scoring import (
     Workspace100ExactRatio,
     Workspace100FailureCounts,
+    Workspace100MacroMetrics,
     Workspace100Rate,
+    Workspace100ScoreBindings,
     Workspace100ScoreCategory,
     Workspace100ScoreCounts,
     Workspace100ScoredRun,
     Workspace100ScoreMetrics,
+    Workspace100ScoreReport,
+    Workspace100ScoreSlice,
+    Workspace100SliceKind,
     Workspace100UnavailableReason,
+    load_verified_workspace100_score_report,
     score_workspace100_claim_run,
+    score_workspace100_claims,
     workspace100_scoring_implementation_digest,
 )
 from witnessgap.workspace100.truth import (
@@ -38,6 +65,7 @@ from witnessgap.workspace100.views import (
 )
 from witnessgap.workspace100.worker import (
     WorkerFailureKind,
+    WorkerLimits,
     WorkerRunRecord,
     WorkerRunStatus,
     workspace100_worker_request_digest,
@@ -50,12 +78,19 @@ _METHOD_DIGEST = "a" * 64
 _IMPLEMENTATION_DIGEST = "b" * 64
 _BACKEND_DIGEST = "c" * 64
 _LIMITS_DIGEST = "d" * 64
+_SYNTHETIC_BACKEND_DIGEST = "f" * 64
 _SHA256_HEX_LENGTH = 64
 _RAW_RATE_NUMERATOR = 50
 _RAW_RATE_DENOMINATOR = 300
 _UNIFORM_CATEGORY_TOTALS = (9, 4, 5, 4, 3)
 _FAILURE_TOTAL = 15
 _INVALID_CLAIM_COUNT = 5
+_METHOD_COUNT = 4
+_CASE_COUNT = 300
+_RUN_COUNT = _METHOD_COUNT * _CASE_COUNT
+_SLICE_COUNT = 30
+_MACRO_COUNT = 5
+_DEFINED_MACRO_COMPONENTS = 2
 
 
 @pytest.fixture(scope="module")
@@ -84,6 +119,128 @@ def truth_set(
         evidence_views,
         trust_anchors=anchors,
     )
+
+
+@pytest.fixture(scope="module")
+def baseline_set() -> BuiltinBaselineSet:
+    return builtin_baseline_set()
+
+
+@pytest.fixture(scope="module")
+def limits() -> WorkerLimits:
+    return WorkerLimits()
+
+
+def _baseline_claim(
+    baseline: BuiltinBaseline,
+    vocabulary: PublicBaselineVocabulary,
+    *,
+    refresh_outcome: Outcome | None,
+) -> ParticipantClaim:
+    if baseline is BuiltinBaseline.ALWAYS_UNKNOWN:
+        return _unknown(UnknownReason.AMBIGUOUS_WORLDS)
+    if baseline is BuiltinBaseline.FORCED_ENVIRONMENT:
+        return _identified(
+            (("environment",),),
+            ((vocabulary.refresh_atom,),),
+        )
+    if refresh_outcome is None:
+        return _unknown(UnknownReason.AMBIGUOUS_WORLDS)
+    if refresh_outcome is Outcome.SUCCESS:
+        return _identified(
+            (("environment",),),
+            ((vocabulary.refresh_atom,),),
+        )
+    if baseline is BuiltinBaseline.REFRESH_OUTCOME:
+        return _identified(
+            (("policy",),),
+            ((vocabulary.repair_atom,),),
+        )
+    return _unknown(UnknownReason.AMBIGUOUS_WORLDS)
+
+
+@pytest.fixture(scope="module")
+def baseline_claim_set(
+    evidence_views: Workspace100EvidenceViews,
+    baseline_set: BuiltinBaselineSet,
+    limits: WorkerLimits,
+) -> Workspace100ClaimSet:
+    template_by_id = {
+        template.template_id: template for template in TEMPLATES
+    }
+    vocabulary_by_action = {
+        entry.action_tool: entry for entry in PUBLIC_BASELINE_VOCABULARY
+    }
+    records = tuple(
+        WorkerRunRecord(
+            method_id=artifact.bundle.method_id,
+            implementation_digest=(
+                artifact.bundle.program_implementation_digest
+            ),
+            backend_implementation_digest=_SYNTHETIC_BACKEND_DIGEST,
+            limits_digest=limits.digest,
+            evidence_digest=case.evidence_digest,
+            request_digest=workspace100_worker_request_digest(case.envelope),
+            status=WorkerRunStatus.CLAIMED,
+            claim=_baseline_claim(
+                artifact.bundle.baseline,
+                vocabulary_by_action[
+                    template_by_id[case.template_id].action_tool
+                ],
+                refresh_outcome=(
+                    case.envelope.evidence.intervention_observations[0].outcome
+                    if case.view is ViewKind.REFRESH_RECEIPT
+                    else None
+                ),
+            ),
+        )
+        for artifact in baseline_set.bundles
+        for case in evidence_views.cases
+    )
+    return build_workspace100_claim_set(
+        evidence_views,
+        baseline_set,
+        tuple(reversed(records)),
+        backend_implementation_digest=_SYNTHETIC_BACKEND_DIGEST,
+        limits=limits,
+    )
+
+
+@pytest.fixture(scope="module")
+def score_bindings(
+    baseline_claim_set: Workspace100ClaimSet,
+    truth_set: Workspace100TruthSet,
+) -> Workspace100ScoreBindings:
+    return Workspace100ScoreBindings(
+        claim_set_root=baseline_claim_set.claim_set_root,
+        truth_root=truth_set.truth_root,
+        baseline_set_root=baseline_claim_set.baseline_set_root,
+        assignment_root=baseline_claim_set.assignment_root,
+        evidence_root=baseline_claim_set.evidence_root,
+        projection_root=baseline_claim_set.projection_root,
+        method_registry_root=baseline_claim_set.method_registry_root,
+        scoring_implementation_digest=(
+            workspace100_scoring_implementation_digest()
+        ),
+    )
+
+
+@pytest.fixture(scope="module")
+def score_report(
+    baseline_claim_set: Workspace100ClaimSet,
+    truth_set: Workspace100TruthSet,
+    score_bindings: Workspace100ScoreBindings,
+) -> Workspace100ScoreReport:
+    return score_workspace100_claims(
+        baseline_claim_set,
+        truth_set,
+        expected=score_bindings,
+    )
+
+
+@pytest.fixture(scope="module")
+def score_report_bytes(score_report: Workspace100ScoreReport) -> bytes:
+    return score_report.to_canonical_bytes()
 
 
 @pytest.fixture(scope="module")
@@ -441,3 +598,480 @@ def test_scoring_source_closure_has_a_stable_digest_shape() -> None:
 
     assert len(digest) == _SHA256_HEX_LENGTH
     assert set(digest) <= set("0123456789abcdef")
+
+
+def test_scoring_fresh_import_is_covered_by_its_source_closure() -> None:
+    script = textwrap.dedent(
+        """
+        import importlib
+        import sys
+        from pathlib import Path
+
+        import witnessgap
+
+        scoring = importlib.import_module("witnessgap.workspace100.scoring")
+        assert "witnessgap.oracle" not in sys.modules
+        package_root = Path(witnessgap.__file__).resolve().parent
+        executed = set()
+        for module in tuple(sys.modules.values()):
+            module_file = getattr(module, "__file__", None)
+            if not module_file or not module_file.endswith(".py"):
+                continue
+            try:
+                relative = Path(module_file).resolve().relative_to(package_root)
+            except ValueError:
+                continue
+            executed.add(relative.as_posix())
+        uncovered = sorted(
+            executed - set(scoring._SCORING_IMPLEMENTATION_PATHS)
+        )
+        assert not uncovered, uncovered
+        """
+    )
+    result = subprocess.run(
+        (sys.executable, "-c", script),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_complete_report_is_closed_rooted_and_rebuild_verified(
+    score_report: Workspace100ScoreReport,
+    score_report_bytes: bytes,
+    baseline_claim_set: Workspace100ClaimSet,
+    truth_set: Workspace100TruthSet,
+    score_bindings: Workspace100ScoreBindings,
+) -> None:
+    parsed = Workspace100ScoreReport.from_canonical_bytes(score_report_bytes)
+    loaded = load_verified_workspace100_score_report(
+        score_report_bytes,
+        baseline_claim_set,
+        truth_set,
+        expected=score_bindings,
+        expected_report_root=score_report.report_root,
+    )
+
+    assert parsed == score_report
+    assert loaded == score_report
+    assert parsed.to_canonical_bytes() == score_report_bytes
+    assert len(score_report.scored_runs) == _RUN_COUNT
+    assert len(score_report.methods) == _METHOD_COUNT
+    assert all(
+        len(method.slices) == _SLICE_COUNT
+        and len(method.template_macros) == _MACRO_COUNT
+        for method in score_report.methods
+    )
+    assert len(score_report.adjudication_root) == _SHA256_HEX_LENGTH
+    assert len(score_report.aggregate_root) == _SHA256_HEX_LENGTH
+    assert len(score_report.report_root) == _SHA256_HEX_LENGTH
+
+
+def _category_vector(
+    counts: Workspace100ScoreCounts,
+) -> tuple[int, ...]:
+    return (
+        counts.failed_ambiguous,
+        counts.failed_identifiable,
+        counts.correct_abstention,
+        counts.wrong_reason_abstention,
+        counts.missed_identifiable,
+        counts.exact_decisive,
+        counts.wrong_witness,
+        counts.wrong_target,
+        counts.decisive_on_ambiguous,
+    )
+
+
+def _contains_float(value: object) -> bool:
+    if type(value) is float:
+        return True
+    if type(value) is list:
+        return any(_contains_float(item) for item in cast(list[object], value))
+    if type(value) is dict:
+        return any(
+            _contains_float(item)
+            for item in cast(dict[str, object], value).values()
+        )
+    return False
+
+
+def _slice_for(
+    report: Workspace100ScoreReport,
+    baseline: BuiltinBaseline,
+    kind: Workspace100SliceKind,
+    *,
+    view: ViewKind | None = None,
+) -> Workspace100ScoreSlice:
+    method = next(
+        candidate
+        for candidate in report.methods
+        if candidate.baseline is baseline
+    )
+    return next(
+        score_slice
+        for score_slice in method.slices
+        if score_slice.kind is kind and score_slice.view is view
+    )
+
+
+def test_frozen_baselines_produce_the_expected_exact_score_vectors(
+    score_report: Workspace100ScoreReport,
+) -> None:
+    expected = {
+        BuiltinBaseline.ALWAYS_UNKNOWN: (0, 0, 100, 0, 200, 0, 0, 0, 0),
+        BuiltinBaseline.FORCED_ENVIRONMENT: (
+            0,
+            0,
+            0,
+            0,
+            0,
+            100,
+            0,
+            100,
+            100,
+        ),
+        BuiltinBaseline.REFRESH_SUCCESS_ONLY: (
+            0,
+            0,
+            100,
+            0,
+            150,
+            50,
+            0,
+            0,
+            0,
+        ),
+        BuiltinBaseline.REFRESH_OUTCOME: (
+            0,
+            0,
+            100,
+            0,
+            100,
+            100,
+            0,
+            0,
+            0,
+        ),
+    }
+
+    assert {
+        method.baseline: _category_vector(method.slices[0].counts)
+        for method in score_report.methods
+    } == expected
+    assert all(
+        method.slices[0].kind is Workspace100SliceKind.OVERALL
+        for method in score_report.methods
+    )
+
+
+def test_frozen_baseline_rates_are_exact_and_float_free(
+    score_report: Workspace100ScoreReport,
+    score_report_bytes: bytes,
+) -> None:
+    expected = {
+        BuiltinBaseline.ALWAYS_UNKNOWN: (
+            Workspace100ExactRatio(0, 1),
+            Workspace100ExactRatio(None, None),
+            Workspace100ExactRatio(0, 1),
+            Workspace100ExactRatio(0, 1),
+            Workspace100ExactRatio(1, 1),
+            Workspace100ExactRatio(0, 1),
+            Workspace100ExactRatio(0, 1),
+        ),
+        BuiltinBaseline.FORCED_ENVIRONMENT: (
+            Workspace100ExactRatio(1, 1),
+            Workspace100ExactRatio(2, 3),
+            Workspace100ExactRatio(2, 3),
+            Workspace100ExactRatio(1, 1),
+            Workspace100ExactRatio(0, 1),
+            Workspace100ExactRatio(1, 2),
+            Workspace100ExactRatio(1, 2),
+        ),
+        BuiltinBaseline.REFRESH_SUCCESS_ONLY: (
+            Workspace100ExactRatio(1, 6),
+            Workspace100ExactRatio(0, 1),
+            Workspace100ExactRatio(0, 1),
+            Workspace100ExactRatio(0, 1),
+            Workspace100ExactRatio(1, 1),
+            Workspace100ExactRatio(1, 4),
+            Workspace100ExactRatio(1, 4),
+        ),
+        BuiltinBaseline.REFRESH_OUTCOME: (
+            Workspace100ExactRatio(1, 3),
+            Workspace100ExactRatio(0, 1),
+            Workspace100ExactRatio(0, 1),
+            Workspace100ExactRatio(0, 1),
+            Workspace100ExactRatio(1, 1),
+            Workspace100ExactRatio(1, 2),
+            Workspace100ExactRatio(1, 2),
+        ),
+    }
+
+    assert {
+        method.baseline: tuple(
+            rate.ratio for rate in method.slices[0].metrics._rates()
+        )
+        for method in score_report.methods
+    } == expected
+    assert not _contains_float(json.loads(score_report_bytes))
+    assert b"NaN" not in score_report_bytes
+    assert b"Infinity" not in score_report_bytes
+
+
+def test_view_template_and_oracle_tables_are_complete(
+    score_report: Workspace100ScoreReport,
+) -> None:
+    expected_views = {
+        BuiltinBaseline.ALWAYS_UNKNOWN: {
+            ViewKind.TRACE_ONLY: (0, 0, 50, 0, 0, 0, 0, 0, 0),
+            ViewKind.OWNER_PROBE: (0, 0, 50, 0, 0, 0, 0, 0, 0),
+            ViewKind.EPOCH_PROBE: (0, 0, 0, 0, 100, 0, 0, 0, 0),
+            ViewKind.REFRESH_RECEIPT: (0, 0, 0, 0, 100, 0, 0, 0, 0),
+        },
+        BuiltinBaseline.FORCED_ENVIRONMENT: {
+            ViewKind.TRACE_ONLY: (0, 0, 0, 0, 0, 0, 0, 0, 50),
+            ViewKind.OWNER_PROBE: (0, 0, 0, 0, 0, 0, 0, 0, 50),
+            ViewKind.EPOCH_PROBE: (0, 0, 0, 0, 0, 50, 0, 50, 0),
+            ViewKind.REFRESH_RECEIPT: (0, 0, 0, 0, 0, 50, 0, 50, 0),
+        },
+        BuiltinBaseline.REFRESH_SUCCESS_ONLY: {
+            ViewKind.TRACE_ONLY: (0, 0, 50, 0, 0, 0, 0, 0, 0),
+            ViewKind.OWNER_PROBE: (0, 0, 50, 0, 0, 0, 0, 0, 0),
+            ViewKind.EPOCH_PROBE: (0, 0, 0, 0, 100, 0, 0, 0, 0),
+            ViewKind.REFRESH_RECEIPT: (0, 0, 0, 0, 50, 50, 0, 0, 0),
+        },
+        BuiltinBaseline.REFRESH_OUTCOME: {
+            ViewKind.TRACE_ONLY: (0, 0, 50, 0, 0, 0, 0, 0, 0),
+            ViewKind.OWNER_PROBE: (0, 0, 50, 0, 0, 0, 0, 0, 0),
+            ViewKind.EPOCH_PROBE: (0, 0, 0, 0, 100, 0, 0, 0, 0),
+            ViewKind.REFRESH_RECEIPT: (0, 0, 0, 0, 0, 100, 0, 0, 0),
+        },
+    }
+    actual = {
+        baseline: {
+            view: _category_vector(
+                _slice_for(
+                    score_report,
+                    baseline,
+                    Workspace100SliceKind.VIEW,
+                    view=view,
+                ).counts
+            )
+            for view in ViewKind
+        }
+        for baseline in BuiltinBaseline
+    }
+
+    assert actual == expected_views
+    assert all(
+        len(
+            tuple(
+                score_slice
+                for score_slice in method.slices
+                if score_slice.kind is Workspace100SliceKind.VIEW_TEMPLATE
+            )
+        )
+        == len(ViewKind) * len(TEMPLATES)
+        for method in score_report.methods
+    )
+    oracle = score_report.oracle_ceiling.slices[0].counts
+    assert _category_vector(oracle) == (0, 0, 100, 0, 0, 200, 0, 0, 0)
+
+
+def test_template_macro_is_unweighted_and_excludes_na_components() -> None:
+    template_counts = (
+        Workspace100ScoreCounts(wrong_target=1, missed_identifiable=59),
+        Workspace100ScoreCounts(exact_decisive=3, missed_identifiable=57),
+        Workspace100ScoreCounts(missed_identifiable=60),
+        Workspace100ScoreCounts(missed_identifiable=60),
+        Workspace100ScoreCounts(missed_identifiable=60),
+    )
+    slices = tuple(
+        Workspace100ScoreSlice(
+            kind=Workspace100SliceKind.TEMPLATE,
+            view=None,
+            template_id=template_id,
+            counts=counts,
+            failure_counts=Workspace100FailureCounts(),
+            metrics=Workspace100ScoreMetrics.from_counts(counts),
+        )
+        for template_id, counts in zip(
+            TemplateId,
+            template_counts,
+            strict=True,
+        )
+    )
+    macro = Workspace100MacroMetrics.from_slices(slices)
+    combined = Workspace100ScoreCounts(
+        wrong_target=1,
+        exact_decisive=3,
+        missed_identifiable=296,
+    )
+
+    assert (
+        macro.false_certainty_risk.defined_template_count
+        == _DEFINED_MACRO_COMPONENTS
+    )
+    assert macro.false_certainty_risk.ratio == Workspace100ExactRatio(1, 2)
+    assert (
+        Workspace100ScoreMetrics.from_counts(combined)
+        .false_certainty_risk.ratio
+        == Workspace100ExactRatio(1, 4)
+    )
+
+
+def test_expected_scorer_identity_is_checked_before_artifact_scoring(
+    baseline_claim_set: Workspace100ClaimSet,
+    truth_set: Workspace100TruthSet,
+    score_bindings: Workspace100ScoreBindings,
+) -> None:
+    wrong = replace(
+        score_bindings,
+        scoring_implementation_digest="0" * _SHA256_HEX_LENGTH,
+    )
+
+    with pytest.raises(ValueError, match="scorer identity"):
+        score_workspace100_claims(
+            baseline_claim_set,
+            truth_set,
+            expected=wrong,
+        )
+
+
+def test_scorer_recomputes_worker_request_digests_from_truth(
+    baseline_claim_set: Workspace100ClaimSet,
+    truth_set: Workspace100TruthSet,
+    score_bindings: Workspace100ScoreBindings,
+) -> None:
+    evidence_digests = tuple(
+        dict.fromkeys(
+            run.worker_run.evidence_digest
+            for run in baseline_claim_set.runs
+        )
+    )
+    first, second = evidence_digests[:2]
+    request_by_evidence = {
+        run.worker_run.evidence_digest: run.worker_run.request_digest
+        for run in baseline_claim_set.runs
+    }
+    swapped = {
+        first: request_by_evidence[second],
+        second: request_by_evidence[first],
+    }
+    runs = tuple(
+        replace(
+            run,
+            worker_run=replace(
+                run.worker_run,
+                request_digest=swapped.get(
+                    run.worker_run.evidence_digest,
+                    run.worker_run.request_digest,
+                ),
+            ),
+        )
+        for run in baseline_claim_set.runs
+    )
+    forged = Workspace100ClaimSet(
+        baseline_set_root=baseline_claim_set.baseline_set_root,
+        assignment_root=baseline_claim_set.assignment_root,
+        evidence_root=baseline_claim_set.evidence_root,
+        projection_root=baseline_claim_set.projection_root,
+        backend_implementation_digest=(
+            baseline_claim_set.backend_implementation_digest
+        ),
+        limits=baseline_claim_set.limits,
+        methods=baseline_claim_set.methods,
+        runs=runs,
+    )
+    attacker_pinned = replace(
+        score_bindings,
+        claim_set_root=forged.claim_set_root,
+    )
+
+    with pytest.raises(ValueError, match="request digest"):
+        score_workspace100_claims(
+            forged,
+            truth_set,
+            expected=attacker_pinned,
+        )
+
+
+def test_structural_parser_rejects_root_tampering_and_open_json(
+    score_report_bytes: bytes,
+) -> None:
+    raw = cast(dict[str, object], json.loads(score_report_bytes))
+    raw["report_root"] = "0" * _SHA256_HEX_LENGTH
+    tampered = canonical_json(cast(JsonValue, raw))
+
+    with pytest.raises(ValueError, match="stored roots"):
+        Workspace100ScoreReport.from_canonical_bytes(tampered)
+    with pytest.raises(ValueError, match="unknown or missing"):
+        opened = cast(dict[str, object], json.loads(score_report_bytes))
+        opened["generated_at"] = "now"
+        Workspace100ScoreReport.from_canonical_bytes(
+            canonical_json(cast(JsonValue, opened))
+        )
+    with pytest.raises(ValueError, match="valid bounded JSON"):
+        Workspace100ScoreReport.from_canonical_bytes(b"{")
+
+
+def test_safe_loader_rejects_a_coherently_rerooted_score(
+    score_report: Workspace100ScoreReport,
+    baseline_claim_set: Workspace100ClaimSet,
+    truth_set: Workspace100TruthSet,
+    score_bindings: Workspace100ScoreBindings,
+) -> None:
+    changed = replace(
+        score_report.scored_runs[0],
+        category=Workspace100ScoreCategory.WRONG_REASON_ABSTENTION,
+    )
+    forged_runs = (changed, *score_report.scored_runs[1:])
+    forged_methods = tuple(
+        scoring_module._build_method_report(
+            method.claim_method,
+            tuple(
+                scored_run
+                for scored_run in forged_runs
+                if scored_run.method_digest == method.method_digest
+            ),
+        )
+        for method in score_report.methods
+    )
+    forged = replace(
+        score_report,
+        scored_runs=forged_runs,
+        methods=forged_methods,
+    )
+    forged_bytes = forged.to_canonical_bytes()
+
+    assert (
+        Workspace100ScoreReport.from_canonical_bytes(forged_bytes) == forged
+    )
+    with pytest.raises(ValueError, match="authenticated source rebuild"):
+        load_verified_workspace100_score_report(
+            forged_bytes,
+            baseline_claim_set,
+            truth_set,
+            expected=score_bindings,
+            expected_report_root=forged.report_root,
+        )
+
+
+def test_report_serialization_excludes_private_routing_and_host_paths(
+    score_report_bytes: bytes,
+) -> None:
+    lowered = score_report_bytes.lower()
+
+    for forbidden in (
+        b'"pair_id"',
+        b'"task_id"',
+        b'"episode_id"',
+        b'"route_digest"',
+        b'"source_snapshot_digest"',
+        b"/home/",
+        b"generated_at",
+    ):
+        assert forbidden not in lowered
