@@ -60,8 +60,10 @@ containment, or provenance.
 
 Participant outcomes such as timeout, output-limit exhaustion, nonzero exit,
 empty output, and invalid claims become rooted failed `WorkerRunRecord`
-values. They remain in the closed 1,200-run matrix; the future scorer contract
-must include them in its all-run denominators.
+values. They remain in the closed 1,200-run matrix. The implemented scorer
+keeps all five failure kinds separately and includes them in the all-case and
+ambiguous/identifiable denominators without treating them as abstentions or
+false certainty.
 
 Evaluator infrastructure failures, a changing backend identity, malformed
 execution inputs, or an inconsistent returned record abort the operation.
@@ -157,7 +159,12 @@ would require attestation, signatures, or a transparency mechanism that
 WitnessGap does not yet implement.
 
 The current repository exercises the full 4×300 matrix and pins regression
-roots in tests. It does not yet materialize a public release directory or
-publish a benchmark score. A later scorer/report builder must join a verified
-ClaimSet to independently pinned truth without exposing truth to participant
-workers.
+roots in tests. The evaluator now joins a canonical-copied ClaimSet to
+independently pinned truth, emits 1,200 auditable adjudications, and rebuilds a
+closed exact report under an independently expected report root. See
+[the scoring and report contract](scoring-report.md). Truth remains outside
+participant workers.
+
+The repository still does not materialize a public release directory or
+release manifest. The measured built-in regression is therefore not presented
+as a public benchmark release.

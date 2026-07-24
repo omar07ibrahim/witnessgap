@@ -158,12 +158,16 @@ success and 50 failure. Therefore the source-level outcome matrix must be:
 | `refresh_success_only` | 250 | 50 | 0 |
 | `refresh_outcome` | 200 | 50 | 50 |
 
-These are construction assertions over emitted claim kinds, not measured
-quality metrics. False-certainty, exact-target, exact-witness, abstention, and
-coverage rates can be published only after the future scorer/report builder
-joins the verified closed 4×300 (1,200-run) ClaimSet to independently pinned
-truth and recomputes an exact report. See
-[the ClaimSet contract](claim-set.md) for the implemented execution boundary.
+The emitted-kind table remains a source-level construction assertion. The
+repository now also runs the exact bundles through 1,200 fresh processes,
+joins the resulting closed ClaimSet to independently replayed truth, and
+checks a regression-pinned exact report. The measured false-certainty,
+exact-target, exact-witness, abstention, and coverage values are in
+[the scoring contract](scoring-report.md).
+
+That in-memory regression is not a materialized public benchmark release. See
+[the ClaimSet contract](claim-set.md) for the execution boundary and the
+remaining external-authentication requirements.
 
 The local POSIX backend remains suitable only for these reviewed built-ins. It
 does not make arbitrary participant code safe; the external isolation gate in

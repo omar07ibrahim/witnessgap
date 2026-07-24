@@ -84,13 +84,16 @@ traces and failure outcomes but different hidden completions and minimal
 repairs. A method is rewarded for useful decisive coverage and penalized for
 unsupported certainty.
 
-Primary metrics will include false-certainty rate, safe coverage at a fixed
-false-certainty bound, exact minimal-witness validity, ambiguity safety, and
-intervention efficiency.
+Workspace-100 reports decisive coverage, false-certainty risk and incidence,
+ambiguity false certainty, correct abstention, exact target family, and exact
+minimal witness as raw counts plus exact rational values. A future
+participant-controlled query protocol can add fixed-risk coverage and
+intervention efficiency; the current one-record worker does not observe either.
 
 ## Status
 
-WitnessGap is building its first vertical slice. There is no benchmark result
+WitnessGap is building its first vertical slice. There is a measured,
+regression-pinned built-in report, but no materialized public benchmark release
 yet.
 
 The current core contains one deterministic in-memory tool world, an
@@ -161,13 +164,21 @@ Under identical committed inputs, equal complete worker records for every key
 produce equal bytes and roots; an arbitrary trusted stateful backend is not
 assumed to be schedule-independent.
 
-This remains verified in-memory construction and an execution artifact, not a
-benchmark result. No materialized release or score/report exists yet. The next
-engineering slice is a truth-joined scorer with exact rational metrics,
-followed by a seed-provenance release manifest and the external isolation
-conformance backend. Participant code must not receive the full WitnessGap
-package because it contains the authored catalog, sealed-source generator, and
-evaluator truth implementation.
+The evaluator now canonical-copies that ClaimSet and independently replayed
+truth, rejoins all 1,200 records by evidence digest, recomputes request
+identities, assigns one of nine exhaustive outcomes, and builds additive
+overall, view, template, and view-by-template tables. Rates and template macros
+are exact rationals with explicit zero-denominator `NA`; all five worker
+failure kinds remain auditable. A closed report binds the ClaimSet, truth,
+public projection, baseline registry, scorer source closure, every
+adjudication, four method summaries, and a separate truth-derived oracle
+ceiling. The real fresh-process regression report root is pinned in tests.
+
+This remains an in-memory measured regression, not a materialized public
+benchmark release. The next engineering slices are seed-provenance release
+artifacts and an external isolation conformance backend. Participant code must
+not receive the full WitnessGap package because it contains the authored
+catalog, sealed-source generator, evaluator truth, and scorer implementation.
 
 See [the attribution contract](docs/attribution-contract.md) for the current
 formal boundary, [the threat model](docs/threat-model.md) for the trusted
@@ -175,7 +186,9 @@ computing base, [the worker boundary](docs/worker-boundary.md) for the
 one-record transport and remaining isolation contract,
 [the baseline bundle contract](docs/baseline-bundles.md) for the public
 method vocabulary, [the ClaimSet contract](docs/claim-set.md) for execution
-records and external verification, and
+records and external verification,
+[the scoring contract](docs/scoring-report.md) for exact metrics and report
+roots, and
 [Workspace-100 protocol](docs/workspace-100-protocol.md) for the frozen Stage B
 slice.
 
