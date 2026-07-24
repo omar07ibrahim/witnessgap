@@ -20,7 +20,9 @@ a replay.
 
 The public trace contains only the task, tool calls, tool results, and terminal
 summary. Oracle state and state-channel provenance are sealed during
-attribution.
+attribution. Public evidence binds a declared coverage-manifest digest; the
+ordered actual read log remains sealed and cannot distinguish otherwise
+compatible worlds.
 
 ## 2. Minimal repair witnesses
 
@@ -49,22 +51,30 @@ queries already made.
 Two worlds are causal twins for \(e\) when both belong to \(K(e)\) but their
 families of minimal repair witnesses imply different target sets.
 
-The benchmark may reveal an additional state channel or permit an additional
-probe. This creates new evidence \(e'\) and a refined compatibility set
+The benchmark may reveal a task-authored probe or permit an intervention query.
+This creates new evidence \(e'\) and a refined compatibility set
 \(K(e') \subseteq K(e)\).
+
+The complete declared family is frozen in a registry manifest containing the
+task and schema identities, intervention and probe contract commitments,
+declared state channels, and every sealed completion commitment. Every evidence
+view and verdict carries the registry digest. Identifiability is always
+relative to this declared finite family: the digest prevents silent removal of
+a committed completion, but it cannot establish that the family exhausts all
+mechanisms in an arbitrary production system.
 
 ## 4. Verdicts
 
-The verifier recognizes four verdict classes:
+The verifier recognizes five verdict classes:
 
 ### `identified_singleton`
 
 Every world in \(K(e)\) has the same normalized singleton target, supported by
 at least one valid minimal witness.
 
-### `identified_equivalence_class`
+### `alternative_minimal_repairs`
 
-The evidence determines the complete family of alternative minimal target
+The evidence determines a complete antichain of alternative minimal target
 sets, but no unique member of that family.
 
 ### `identified_compound`
@@ -89,7 +99,8 @@ panel is exhausted before identification.
 - `missing_state`;
 - `budget_exhausted`;
 - `replay_diverged`;
-- `intervention_unfulfilled`.
+- `intervention_unfulfilled`;
+- `no_repair_in_declared_algebra`.
 
 ## 5. Certificates
 

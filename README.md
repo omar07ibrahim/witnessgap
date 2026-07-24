@@ -19,8 +19,8 @@ Every diagnosis has one of five forms:
 - `identified_singleton`: one target is shared by every compatible minimal
   repair;
 - `identified_compound`: one irreducible repair requires multiple targets;
-- `identified_equivalence_class`: multiple alternative minimal repairs remain
-  causally equivalent under the available evidence;
+- `alternative_minimal_repairs`: multiple incomparable minimal repairs remain
+  under the available evidence;
 - `effect_only`: an intervention changes the outcome without localizing the
   original fault;
 - `not_identifiable`: compatible hidden worlds still imply incompatible causal
@@ -32,8 +32,11 @@ fails. An accepted negative certificate exhibits two compatible world
 completions with the same public evidence and different causal verdicts.
 
 The claim is deliberately bounded: a certificate is valid relative to an
-explicit state schema, intervention algebra, and success oracle. WitnessGap
-does not infer arbitrary production causality from incomplete logs.
+explicit state schema, intervention algebra, success oracle, and committed
+finite completion family. A registry digest binds every verdict to that
+declared family; it does not prove that an omitted real-world mechanism cannot
+exist. WitnessGap does not infer arbitrary production causality from
+incomplete logs.
 
 ## Why another benchmark?
 

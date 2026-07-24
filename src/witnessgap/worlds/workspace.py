@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from witnessgap.canonical import canonical_json
+from witnessgap.canonical import JsonValue, canonical_digest, canonical_json
 from witnessgap.model import InterventionAtom, Outcome, ReplayResult
 
 
@@ -21,6 +21,9 @@ _ATOMS = (
 _PROBES = ("draft_store_epoch", "workspace_owner")
 _APPROVED_REVISION = "release-notes-v21"
 _PREVIOUS_REVISION = "release-notes-v17"
+_TASK_SCHEMA_ID = "workspace_release_notes_v1"
+_TASK_ID = "northstar_release_notes_001"
+_STATE_CHANNELS = ("draft_store_epoch", "policy_selection")
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,7 +45,48 @@ class WorkspaceWorld:
 
     @property
     def world_id(self) -> str:
-        return f"workspace_{self.cause.value}"
+        return f"wgc_{self.completion_commitment[:24]}"
+
+    @property
+    def task_schema_id(self) -> str:
+        return _TASK_SCHEMA_ID
+
+    @property
+    def task_id(self) -> str:
+        return _TASK_ID
+
+    @property
+    def declared_state_channels(self) -> tuple[str, ...]:
+        return _STATE_CHANNELS
+
+    @property
+    def completion_commitment(self) -> str:
+        state = self._initial_state()
+        payload: dict[str, JsonValue] = {
+            "approved_pointer": state.approved_pointer,
+            "format": "witnessgap.workspace-completion.v1",
+            "selected_pointer": state.selected_pointer,
+            "task_id": self.task_id,
+        }
+        return canonical_digest("witnessgap.world-completion.v1", payload)
+
+    @property
+    def intervention_contract_digest(self) -> str:
+        payload: dict[str, JsonValue] = {
+            "atoms": tuple({"name": atom.name, "target": atom.target} for atom in _ATOMS),
+            "format": "witnessgap.workspace-interventions.v1",
+            "task_schema_id": self.task_schema_id,
+        }
+        return canonical_digest("witnessgap.intervention-contract.v1", payload)
+
+    @property
+    def probe_contract_digest(self) -> str:
+        payload: dict[str, JsonValue] = {
+            "format": "witnessgap.workspace-probes.v1",
+            "probe_names": _PROBES,
+            "task_schema_id": self.task_schema_id,
+        }
+        return canonical_digest("witnessgap.probe-contract.v1", payload)
 
     @property
     def atoms(self) -> tuple[InterventionAtom, ...]:
@@ -106,7 +150,7 @@ class WorkspaceWorld:
         return ReplayResult(
             public_trace=trace,
             outcome=Outcome.SUCCESS if approved else Outcome.FAILURE,
-            state_reads=("draft_store_epoch", "policy_selection"),
+            state_reads=_STATE_CHANNELS,
         )
 
     def _initial_state(self) -> _WorkspaceState:
@@ -124,7 +168,9 @@ class WorkspaceWorld:
 def workspace_twins() -> tuple[WorkspaceWorld, WorkspaceWorld]:
     """Return the deterministic policy/environment causal-twin pair."""
 
-    return (
+    worlds = (
         WorkspaceWorld(WorkspaceCause.ENVIRONMENT),
         WorkspaceWorld(WorkspaceCause.POLICY),
     )
+    first, second = sorted(worlds, key=lambda world: world.world_id)
+    return first, second
