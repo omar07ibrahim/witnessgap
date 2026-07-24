@@ -5,7 +5,12 @@ from dataclasses import dataclass
 import pytest
 
 from witnessgap.model import InterventionAtom, Outcome, ReplayResult
-from witnessgap.oracle import InvalidWorldError, enumerate_repair_panel
+from witnessgap.oracle import (
+    MAX_ATOMS,
+    InvalidWorldError,
+    NonDeterministicWorldError,
+    enumerate_repair_panel,
+)
 
 
 @dataclass(frozen=True)
@@ -109,3 +114,66 @@ def test_rejects_duplicate_or_unsorted_atoms() -> None:
         enumerate_repair_panel(duplicate)
     with pytest.raises(InvalidWorldError, match="sorted"):
         enumerate_repair_panel(unsorted)
+
+
+def test_minimizes_again_after_projecting_atoms_to_targets() -> None:
+    world = BooleanWorld(
+        world_id="target_projection",
+        atoms=(
+            atom("repair_primary_tool", "tool"),
+            atom("repair_secondary_policy", "policy"),
+            atom("repair_secondary_tool", "tool"),
+        ),
+        successful_sets=frozenset(
+            {
+                frozenset({"repair_primary_tool"}),
+                frozenset({"repair_secondary_policy", "repair_secondary_tool"}),
+            }
+        ),
+    )
+
+    panel = enumerate_repair_panel(world)
+
+    assert panel.minimal_witnesses == (
+        ("repair_primary_tool",),
+        ("repair_secondary_policy", "repair_secondary_tool"),
+    )
+    assert panel.target_family == (("tool",),)
+
+
+@dataclass
+class CountingWorld:
+    _atoms: tuple[InterventionAtom, ...]
+    calls: int = 0
+
+    @property
+    def world_id(self) -> str:
+        return "counting"
+
+    @property
+    def atoms(self) -> tuple[InterventionAtom, ...]:
+        return self._atoms
+
+    def replay(self, _interventions: frozenset[str]) -> ReplayResult:
+        self.calls += 1
+        return ReplayResult(
+            public_trace=f"call {self.calls}".encode(),
+            outcome=Outcome.FAILURE,
+        )
+
+
+def test_checks_replay_determinism() -> None:
+    world = CountingWorld((atom("repair"),))
+
+    with pytest.raises(NonDeterministicWorldError, match="replay diverged"):
+        enumerate_repair_panel(world)
+
+
+def test_rejects_an_oversized_algebra_before_replay() -> None:
+    atoms = tuple(atom(f"repair_{index:02d}") for index in range(MAX_ATOMS + 1))
+    world = CountingWorld(atoms)
+
+    with pytest.raises(InvalidWorldError, match="atom bound"):
+        enumerate_repair_panel(world)
+
+    assert world.calls == 0

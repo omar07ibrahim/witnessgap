@@ -11,7 +11,7 @@ _IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
 
 def _require_identifier(value: str, *, field: str) -> None:
-    if not _IDENTIFIER.fullmatch(value):
+    if not isinstance(value, str) or not _IDENTIFIER.fullmatch(value):
         raise ValueError(f"{field} must match {_IDENTIFIER.pattern!r}: {value!r}")
 
 
@@ -47,6 +47,12 @@ class ReplayResult:
     state_reads: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        if not isinstance(self.public_trace, bytes):
+            raise TypeError("public_trace must be bytes")
+        if not isinstance(self.outcome, Outcome):
+            raise TypeError("outcome must be an Outcome")
+        if not isinstance(self.state_reads, tuple):
+            raise TypeError("state_reads must be a tuple")
         for channel in self.state_reads:
             _require_identifier(channel, field="state channel")
         if tuple(sorted(set(self.state_reads))) != self.state_reads:

@@ -14,9 +14,15 @@ from witnessgap.model import (
     normalize_witness,
 )
 
+MAX_ATOMS = 12
+
 
 class InvalidWorldError(ValueError):
     """Raised when a world violates the finite-oracle contract."""
+
+
+class NonDeterministicWorldError(InvalidWorldError):
+    """Raised when the same bounded replay produces different results."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,13 +62,20 @@ def enumerate_repair_panel(world: FiniteWorld) -> RepairPanel:
     monotonic repair effects.
     """
 
-    atom_names = tuple(atom.name for atom in world.atoms)
+    world_id = world.world_id
+    atoms = world.atoms
+    if not isinstance(atoms, tuple):
+        raise InvalidWorldError("intervention atoms must be a tuple")
+    if len(atoms) > MAX_ATOMS:
+        raise InvalidWorldError(f"intervention algebra exceeds the {MAX_ATOMS}-atom bound")
+
+    atom_names = tuple(atom.name for atom in atoms)
     if len(set(atom_names)) != len(atom_names):
         raise InvalidWorldError("intervention atom names must be unique")
     if atom_names != tuple(sorted(atom_names)):
         raise InvalidWorldError("intervention atoms must be sorted by name")
 
-    atom_targets = {atom.name: atom.target for atom in world.atoms}
+    atom_targets = {atom.name: atom.target for atom in atoms}
     receipts: list[ReplayReceipt] = []
     successful: list[frozenset[str]] = []
 
@@ -70,6 +83,11 @@ def enumerate_repair_panel(world: FiniteWorld) -> RepairPanel:
         for selected in combinations(atom_names, size):
             intervention_set = frozenset(selected)
             result = world.replay(intervention_set)
+            repeated_result = world.replay(intervention_set)
+            if result != repeated_result:
+                raise NonDeterministicWorldError(
+                    f"{world_id}: replay diverged for {normalize_witness(intervention_set)!r}"
+                )
             canonical = normalize_witness(intervention_set)
             receipts.append(ReplayReceipt(interventions=canonical, result=result))
             if result.outcome is Outcome.SUCCESS:
@@ -83,12 +101,20 @@ def enumerate_repair_panel(world: FiniteWorld) -> RepairPanel:
         for candidate in successful
         if not any(other < candidate for other in successful)
     )
-    target_family = tuple(
-        sorted({tuple(sorted({atom_targets[name] for name in witness})) for witness in minimal})
-    )
+    projected_targets = {frozenset(atom_targets[name] for name in witness) for witness in minimal}
+    minimal_targets = {
+        targets
+        for targets in projected_targets
+        if not any(other < targets for other in projected_targets)
+    }
+    target_family = tuple(sorted(tuple(sorted(targets)) for targets in minimal_targets))
+    if world.atoms != atoms:
+        raise NonDeterministicWorldError(f"{world_id}: intervention algebra changed during replay")
+    if world.world_id != world_id:
+        raise NonDeterministicWorldError(f"{world_id}: world ID changed during replay")
 
     return RepairPanel(
-        world_id=world.world_id,
+        world_id=world_id,
         atom_names=atom_names,
         receipts=tuple(receipts),
         minimal_witnesses=minimal,
