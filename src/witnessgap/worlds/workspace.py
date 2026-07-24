@@ -124,7 +124,7 @@ class _WorkspaceRunner:
                         "tool": "publish_release_notes",
                     },
                 ],
-                "interventions": sorted(interventions),
+                "interventions": tuple(sorted(interventions)),
                 "task": "Publish the approved Northstar release notes.",
                 "terminal": "approved_content_present" if approved else "approved_content_missing",
             }
@@ -152,7 +152,7 @@ class WorkspaceWorld:
     sealed_source: SealedWorldSource
 
     def __init__(self, cause: WorkspaceCause) -> None:
-        if not isinstance(cause, WorkspaceCause):
+        if type(cause) is not WorkspaceCause:
             raise TypeError("cause must be a WorkspaceCause")
         object.__setattr__(self, "cause", cause)
         object.__setattr__(self, "sealed_source", workspace_source(cause))
@@ -294,6 +294,9 @@ class WorkspaceWorld:
     def validate_artifact(self, artifact: ExecutionArtifact) -> Outcome:
         """Validate the complete execution before deriving its outcome."""
 
+        if type(artifact) is not ExecutionArtifact:
+            raise TypeError("artifact must be an exact ExecutionArtifact")
+        artifact.validate()
         if artifact.source_snapshot_digest != self.source_snapshot_digest:
             raise ValueError("execution artifact belongs to a different source snapshot")
         interventions = frozenset(artifact.intervention_log)
@@ -356,19 +359,6 @@ class WorkspaceWorld:
             raise ValueError("public trace contradicts the source snapshot or terminal state")
         return Outcome.SUCCESS if approved else Outcome.FAILURE
 
-    def evaluate_terminal(self, terminal_state: bytes) -> Outcome:
-        value = _canonical_object(terminal_state, label="terminal state")
-        if set(value) != {"approved_content_present", "published_document"}:
-            raise ValueError("terminal state does not match the workspace oracle schema")
-        approved = value["approved_content_present"]
-        document = value["published_document"]
-        if not isinstance(approved, bool) or not isinstance(document, str):
-            raise ValueError("terminal state contains invalid workspace field types")
-        expected_approved = document == _APPROVED_REVISION
-        if approved is not expected_approved:
-            raise ValueError("terminal state approval flag contradicts the published document")
-        return Outcome.SUCCESS if approved else Outcome.FAILURE
-
     def replay(self, interventions: frozenset[str]) -> ReplayResult:
         artifact = self.fresh_runner().run(interventions)
         return ReplayResult(
@@ -398,11 +388,14 @@ class WorkspaceSourceAdapter:
         return workspace_adapter_implementation_digest()
 
     def decode(self, source: SealedWorldSource) -> WorkspaceWorld:
+        if type(source) is not SealedWorldSource:
+            raise TypeError("workspace source must be an exact SealedWorldSource")
+        source.validate()
         try:
             raw: object = json.loads(source.source_bytes)
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise ValueError("workspace source is not valid UTF-8 JSON") from error
-        if not isinstance(raw, dict) or canonical_json(cast(JsonValue, raw)) != source.source_bytes:
+        if type(raw) is not dict or canonical_json(cast(JsonValue, raw)) != source.source_bytes:
             raise ValueError("workspace source is not canonical JSON")
         if set(raw) != {"format", "initial_state", "task_id", "task_schema_id"}:
             raise ValueError("workspace source contains unknown or missing fields")
@@ -413,14 +406,14 @@ class WorkspaceSourceAdapter:
         ):
             raise ValueError("workspace source declares an unsupported schema")
         initial_state = raw["initial_state"]
-        if not isinstance(initial_state, dict) or set(initial_state) != {
+        if type(initial_state) is not dict or set(initial_state) != {
             "approved_pointer",
             "selected_pointer",
         }:
             raise ValueError("workspace source contains an invalid initial state")
         approved_pointer = initial_state["approved_pointer"]
         selected_pointer = initial_state["selected_pointer"]
-        if not isinstance(approved_pointer, str) or not isinstance(selected_pointer, str):
+        if type(approved_pointer) is not str or type(selected_pointer) is not str:
             raise ValueError("workspace source state values must be strings")
         state = _WorkspaceState(
             approved_pointer=approved_pointer,
@@ -433,7 +426,7 @@ class WorkspaceSourceAdapter:
 def workspace_source(cause: WorkspaceCause) -> SealedWorldSource:
     """Return the canonical source bundle for one authored completion."""
 
-    if not isinstance(cause, WorkspaceCause):
+    if type(cause) is not WorkspaceCause:
         raise TypeError("cause must be a WorkspaceCause")
     state = _initial_state_for(cause)
     source_bytes = canonical_json(
@@ -523,10 +516,12 @@ def _state_value_digest(value: str) -> str:
 
 
 def _canonical_object(payload: bytes, *, label: str) -> dict[str, object]:
+    if type(payload) is not bytes:
+        raise TypeError(f"{label} must be exact bytes")
     try:
         value: object = json.loads(payload)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError(f"{label} is not valid UTF-8 JSON") from error
-    if not isinstance(value, dict) or canonical_json(cast(JsonValue, value)) != payload:
+    if type(value) is not dict or canonical_json(cast(JsonValue, value)) != payload:
         raise ValueError(f"{label} is not canonical JSON")
     return cast(dict[str, object], value)

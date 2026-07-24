@@ -32,14 +32,14 @@ class SealedWorldSource:
     def validate(self) -> None:
         """Recheck an opening after crossing an untrusted runtime boundary."""
 
-        if not isinstance(self.source_bytes, bytes):
-            raise TypeError("source_bytes must be bytes")
+        if type(self.source_bytes) is not bytes:
+            raise TypeError("source_bytes must be exact bytes")
         if not self.source_bytes:
             raise ValueError("source_bytes cannot be empty")
         if len(self.source_bytes) > _MAX_SOURCE_BYTES:
             raise ValueError(f"source_bytes cannot exceed {_MAX_SOURCE_BYTES} bytes")
-        if not isinstance(self.commitment_salt, bytes):
-            raise TypeError("commitment_salt must be bytes")
+        if type(self.commitment_salt) is not bytes:
+            raise TypeError("commitment_salt must be exact bytes")
         if len(self.commitment_salt) != _COMMITMENT_SALT_BYTES:
             raise ValueError(f"commitment_salt must contain {_COMMITMENT_SALT_BYTES} bytes")
 

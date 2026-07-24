@@ -7,12 +7,17 @@ every replay from committed source bytes, and validates complete artifacts.
 
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
+from typing import cast
 
 from witnessgap.adapters import TrustedAdapterError, resolve_trusted_adapter
-from witnessgap.canonical import JsonValue, canonical_digest, tagged_digest
+from witnessgap.canonical import JsonValue, canonical_digest, canonical_json, tagged_digest
 from witnessgap.identifiability import (
     Evidence,
+    InterventionObservation,
+    ProbeObservation,
     RegistryError,
     RegistryManifest,
     UnknownReason,
@@ -30,14 +35,21 @@ from witnessgap.source import (
     WorldSourceAdapter,
     package_implementation_digest,
 )
+from witnessgap.trust import VerificationTrustAnchor
 
 VERIFIER_MAX_ATOMS = 12
+_CERTIFICATE_FORMAT = "witnessgap.attribution-certificate.v1"
+_SHA256_HEX_LENGTH = 64
+_IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_PAIR_SIZE = 2
+_MIN_ALTERNATIVES = 2
 _VERIFIER_IMPLEMENTATION_PATHS = (
     "adapters.py",
     "canonical.py",
     "identifiability.py",
     "model.py",
     "source.py",
+    "trust.py",
     "verifier.py",
 )
 
@@ -138,6 +150,7 @@ class VerifiedAttribution:
     evidence_digest: str
     adapter_implementation_digest: str
     verifier_implementation_digest: str
+    trust_anchor_digest: str
     panel_root: str
     proof_root: str
     kind: VerdictKind
@@ -146,12 +159,30 @@ class VerifiedAttribution:
     unknown_reason: UnknownReason | None = None
     ambiguity_commitments: tuple[str, str] | None = None
 
+    def __post_init__(self) -> None:
+        _validate_verified_attribution(self)
+
+    def to_canonical_bytes(self) -> bytes:
+        """Serialize a closed, self-checking certificate record."""
+
+        _validate_verified_attribution(self)
+        payload = _certificate_proof_payload(self)
+        payload["proof_root"] = self.proof_root
+        return canonical_json(payload)
+
+    @classmethod
+    def from_canonical_bytes(cls, payload: bytes) -> VerifiedAttribution:
+        """Parse a certificate record and recompute its internal proof root."""
+
+        return _parse_attribution_certificate(payload)
+
 
 @dataclass(frozen=True, slots=True)
 class _AttributionBody:
     registry_digest: str
     evidence_digest: str
     adapter_implementation_digest: str
+    trust_anchor_digest: str
     panel_root: str
     kind: VerdictKind
     compatible_completion_commitments: tuple[str, ...]
@@ -160,22 +191,40 @@ class _AttributionBody:
     ambiguity_commitments: tuple[str, str] | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _CertificateFields:
+    registry_digest: str
+    evidence_digest: str
+    adapter_implementation_digest: str
+    verifier_implementation_digest: str
+    trust_anchor_digest: str
+    panel_root: str
+    kind: VerdictKind
+    compatible_completion_commitments: tuple[str, ...]
+    target_family: TargetFamily | None
+    unknown_reason: UnknownReason | None
+    ambiguity_commitments: tuple[str, str] | None
+
+
 def verify_registry_attribution(  # noqa: PLR0912
     sources: tuple[SealedWorldSource, ...],
     *,
     manifest: RegistryManifest,
-    trusted_registry_digest: str,
+    trust_anchor: VerificationTrustAnchor,
     evidence: Evidence,
 ) -> VerifiedAttribution:
     """Rebuild the committed family from source openings and derive a verdict."""
 
-    _validate_source_openings(sources)
-    _preflight_manifest(manifest)
-    _validate_evidence(evidence)
-    if manifest.digest != trusted_registry_digest:
-        raise VerificationError("registry manifest does not match the trusted digest")
+    sources = _normalize_source_openings(sources)
+    trust_anchor = _normalize_trust_anchor(trust_anchor)
+    manifest = _normalize_manifest(manifest)
+    evidence = _normalize_evidence(evidence)
+    if manifest.digest != trust_anchor.registry_digest:
+        raise VerificationError("registry manifest does not match the trust anchor")
+    if manifest.adapter_implementation_digest != trust_anchor.adapter_implementation_digest:
+        raise VerificationError("registry adapter does not match the trust anchor")
     if (
-        evidence.registry_digest != trusted_registry_digest
+        evidence.registry_digest != trust_anchor.registry_digest
         or evidence.coverage_manifest_digest != manifest.coverage_digest
     ):
         raise VerificationError("evidence is not bound to the trusted registry")
@@ -221,9 +270,10 @@ def verify_registry_attribution(  # noqa: PLR0912
         right = next(panel for panel in compatible[1:] if panel.target_family != left.target_family)
         return _finalize_attribution(
             _AttributionBody(
-                registry_digest=trusted_registry_digest,
+                registry_digest=trust_anchor.registry_digest,
                 evidence_digest=verified_evidence_digest,
                 adapter_implementation_digest=manifest.adapter_implementation_digest,
+                trust_anchor_digest=trust_anchor.digest,
                 panel_root=panel_root,
                 kind=VerdictKind.NOT_IDENTIFIABLE,
                 compatible_completion_commitments=compatible_commitments,
@@ -239,9 +289,10 @@ def verify_registry_attribution(  # noqa: PLR0912
     if not profile:
         return _finalize_attribution(
             _AttributionBody(
-                registry_digest=trusted_registry_digest,
+                registry_digest=trust_anchor.registry_digest,
                 evidence_digest=verified_evidence_digest,
                 adapter_implementation_digest=manifest.adapter_implementation_digest,
+                trust_anchor_digest=trust_anchor.digest,
                 panel_root=panel_root,
                 kind=VerdictKind.NOT_IDENTIFIABLE,
                 compatible_completion_commitments=compatible_commitments,
@@ -256,9 +307,10 @@ def verify_registry_attribution(  # noqa: PLR0912
         kind = VerdictKind.IDENTIFIED_SINGLETON
     return _finalize_attribution(
         _AttributionBody(
-            registry_digest=trusted_registry_digest,
+            registry_digest=trust_anchor.registry_digest,
             evidence_digest=verified_evidence_digest,
             adapter_implementation_digest=manifest.adapter_implementation_digest,
+            trust_anchor_digest=trust_anchor.digest,
             panel_root=panel_root,
             kind=kind,
             compatible_completion_commitments=compatible_commitments,
@@ -274,13 +326,8 @@ def verify_source_panel(
 ) -> VerifiedPanel:
     """Verify one panel with the adapter trusted by this release."""
 
-    if type(source) is not SealedWorldSource:
-        raise VerificationError("source must be an exact SealedWorldSource")
-    try:
-        source.validate()
-    except (TypeError, ValueError) as error:
-        raise VerificationError("source opening failed runtime validation") from error
-    _preflight_manifest(manifest)
+    source = _normalize_source_opening(source)
+    manifest = _normalize_manifest(manifest)
     try:
         adapter = resolve_trusted_adapter(
             manifest.adapter_id,
@@ -432,6 +479,12 @@ def _execute_fresh(
         artifact = runner.run(interventions)
     except (RuntimeError, TypeError, ValueError) as error:
         raise VerificationError(f"{source.completion_commitment}: fresh replay failed") from error
+    if type(artifact) is not ExecutionArtifact:
+        raise VerificationError("runner returned a non-ExecutionArtifact value")
+    try:
+        artifact.validate()
+    except (TypeError, ValueError) as error:
+        raise VerificationError("runner returned a malformed execution artifact") from error
     if artifact.source_snapshot_digest != source.snapshot_digest:
         raise VerificationError(
             f"{source.completion_commitment}: replay reports a different source snapshot"
@@ -595,7 +648,7 @@ def _preflight_evidence(evidence: Evidence, manifest: RegistryManifest) -> None:
         )
 
 
-def _preflight_manifest(manifest: object) -> None:
+def _normalize_manifest(manifest: object) -> RegistryManifest:
     if type(manifest) is not RegistryManifest:
         raise VerificationError("manifest must be an exact RegistryManifest")
     try:
@@ -606,27 +659,71 @@ def _preflight_manifest(manifest: object) -> None:
         raise VerificationError("registry manifest failed closed-schema validation") from error
     if parsed != manifest or parsed.to_canonical_bytes() != encoded:
         raise VerificationError("registry manifest failed canonical round-trip")
+    return parsed
 
 
-def _validate_evidence(evidence: object) -> None:
+def _normalize_trust_anchor(anchor: object) -> VerificationTrustAnchor:
+    if type(anchor) is not VerificationTrustAnchor:
+        raise VerificationError("trust anchor must be an exact VerificationTrustAnchor")
+    try:
+        anchor.validate()
+        encoded = anchor.to_canonical_bytes()
+        parsed = VerificationTrustAnchor.from_canonical_bytes(encoded)
+    except (TypeError, ValueError) as error:
+        raise VerificationError("trust anchor failed closed-schema validation") from error
+    if parsed != anchor or parsed.to_canonical_bytes() != encoded:
+        raise VerificationError("trust anchor failed canonical round-trip")
+    if anchor.verifier_implementation_digest != verifier_implementation_digest():
+        raise VerificationError("installed verifier implementation differs from the trust anchor")
+    return parsed
+
+
+def _normalize_evidence(evidence: object) -> Evidence:
     if type(evidence) is not Evidence:
         raise VerificationError("evidence must be an exact Evidence value")
     try:
         evidence.validate()
     except (TypeError, ValueError) as error:
         raise VerificationError("evidence failed nested runtime validation") from error
+    return Evidence(
+        registry_digest=evidence.registry_digest,
+        coverage_manifest_digest=evidence.coverage_manifest_digest,
+        public_trace=evidence.public_trace,
+        outcome=evidence.outcome,
+        probes=tuple(
+            ProbeObservation(name=observation.name, value=observation.value)
+            for observation in evidence.probes
+        ),
+        intervention_observations=tuple(
+            InterventionObservation(
+                interventions=tuple(observation.interventions),
+                public_trace=observation.public_trace,
+                outcome=observation.outcome,
+            )
+            for observation in evidence.intervention_observations
+        ),
+    )
 
 
-def _validate_source_openings(sources: object) -> None:
-    if not isinstance(sources, tuple):
-        raise VerificationError("source openings must be supplied as a tuple")
-    if any(type(source) is not SealedWorldSource for source in sources):
-        raise VerificationError("every source opening must be an exact SealedWorldSource")
+def _normalize_source_opening(source: object) -> SealedWorldSource:
+    if type(source) is not SealedWorldSource:
+        raise VerificationError("source must be an exact SealedWorldSource")
     try:
-        for source in sources:
-            source.validate()
+        source.validate()
     except (TypeError, ValueError) as error:
         raise VerificationError("source opening failed runtime validation") from error
+    return SealedWorldSource(
+        source_bytes=source.source_bytes,
+        commitment_salt=source.commitment_salt,
+    )
+
+
+def _normalize_source_openings(sources: object) -> tuple[SealedWorldSource, ...]:
+    if type(sources) is not tuple:
+        raise VerificationError("source openings must be supplied as an exact tuple")
+    if any(type(source) is not SealedWorldSource for source in sources):
+        raise VerificationError("every source opening must be an exact SealedWorldSource")
+    return tuple(_normalize_source_opening(source) for source in sources)
 
 
 def _witness_for_mask(mask: int, atom_names: tuple[str, ...]) -> Witness:
@@ -635,25 +732,28 @@ def _witness_for_mask(mask: int, atom_names: tuple[str, ...]) -> Witness:
 
 def _finalize_attribution(body: _AttributionBody) -> VerifiedAttribution:
     verifier_digest = verifier_implementation_digest()
-    payload: dict[str, JsonValue] = {
-        "adapter_implementation_digest": body.adapter_implementation_digest,
-        "ambiguity_commitments": body.ambiguity_commitments,
-        "compatible_completion_commitments": body.compatible_completion_commitments,
-        "evidence_digest": body.evidence_digest,
-        "format": "witnessgap.attribution-certificate.v1",
-        "kind": body.kind.value,
-        "panel_root": body.panel_root,
-        "registry_digest": body.registry_digest,
-        "target_family": body.target_family,
-        "unknown_reason": (body.unknown_reason.value if body.unknown_reason is not None else None),
-        "verifier_implementation_digest": verifier_digest,
-    }
-    proof_root = canonical_digest("witnessgap.attribution-certificate.v1", payload)
+    payload = _certificate_payload(
+        _CertificateFields(
+            registry_digest=body.registry_digest,
+            evidence_digest=body.evidence_digest,
+            adapter_implementation_digest=body.adapter_implementation_digest,
+            verifier_implementation_digest=verifier_digest,
+            trust_anchor_digest=body.trust_anchor_digest,
+            panel_root=body.panel_root,
+            kind=body.kind,
+            compatible_completion_commitments=body.compatible_completion_commitments,
+            target_family=body.target_family,
+            unknown_reason=body.unknown_reason,
+            ambiguity_commitments=body.ambiguity_commitments,
+        )
+    )
+    proof_root = canonical_digest(_CERTIFICATE_FORMAT, payload)
     return VerifiedAttribution(
         registry_digest=body.registry_digest,
         evidence_digest=body.evidence_digest,
         adapter_implementation_digest=body.adapter_implementation_digest,
         verifier_implementation_digest=verifier_digest,
+        trust_anchor_digest=body.trust_anchor_digest,
         panel_root=body.panel_root,
         proof_root=proof_root,
         kind=body.kind,
@@ -664,12 +764,324 @@ def _finalize_attribution(body: _AttributionBody) -> VerifiedAttribution:
     )
 
 
+def _certificate_payload(fields: _CertificateFields) -> dict[str, JsonValue]:
+    return {
+        "adapter_implementation_digest": fields.adapter_implementation_digest,
+        "ambiguity_commitments": fields.ambiguity_commitments,
+        "compatible_completion_commitments": fields.compatible_completion_commitments,
+        "evidence_digest": fields.evidence_digest,
+        "format": _CERTIFICATE_FORMAT,
+        "kind": fields.kind.value,
+        "panel_root": fields.panel_root,
+        "registry_digest": fields.registry_digest,
+        "target_family": fields.target_family,
+        "trust_anchor_digest": fields.trust_anchor_digest,
+        "unknown_reason": (
+            fields.unknown_reason.value if fields.unknown_reason is not None else None
+        ),
+        "verifier_implementation_digest": fields.verifier_implementation_digest,
+    }
+
+
+def _certificate_proof_payload(
+    certificate: VerifiedAttribution,
+) -> dict[str, JsonValue]:
+    return _certificate_payload(
+        _CertificateFields(
+            registry_digest=certificate.registry_digest,
+            evidence_digest=certificate.evidence_digest,
+            adapter_implementation_digest=certificate.adapter_implementation_digest,
+            verifier_implementation_digest=certificate.verifier_implementation_digest,
+            trust_anchor_digest=certificate.trust_anchor_digest,
+            panel_root=certificate.panel_root,
+            kind=certificate.kind,
+            compatible_completion_commitments=(certificate.compatible_completion_commitments),
+            target_family=certificate.target_family,
+            unknown_reason=certificate.unknown_reason,
+            ambiguity_commitments=certificate.ambiguity_commitments,
+        )
+    )
+
+
+def verify_attribution_certificate(
+    payload: bytes,
+    *,
+    trust_anchor: VerificationTrustAnchor,
+    expected_proof_root: str,
+) -> VerifiedAttribution:
+    """Verify a serialized record against independently pinned digests.
+
+    This checks record integrity and release binding. Re-establishing replay
+    semantics still requires ``verify_registry_attribution`` and source
+    openings.
+    """
+
+    anchor = _normalize_trust_anchor(trust_anchor)
+    if not _is_sha256(expected_proof_root):
+        raise VerificationError("expected proof root must be a lowercase SHA-256 digest")
+    certificate = VerifiedAttribution.from_canonical_bytes(payload)
+    if certificate.proof_root != expected_proof_root:
+        raise VerificationError("certificate does not match the expected proof root")
+    if (
+        certificate.registry_digest != anchor.registry_digest
+        or certificate.adapter_implementation_digest != anchor.adapter_implementation_digest
+        or certificate.verifier_implementation_digest != anchor.verifier_implementation_digest
+        or certificate.trust_anchor_digest != anchor.digest
+    ):
+        raise VerificationError("certificate does not match the external trust anchor")
+    return certificate
+
+
+def _validate_verified_attribution(certificate: VerifiedAttribution) -> None:
+    digest_fields = (
+        certificate.registry_digest,
+        certificate.evidence_digest,
+        certificate.adapter_implementation_digest,
+        certificate.verifier_implementation_digest,
+        certificate.trust_anchor_digest,
+        certificate.panel_root,
+        certificate.proof_root,
+    )
+    if not all(_is_sha256(value) for value in digest_fields):
+        raise ValueError("certificate digest fields must be lowercase SHA-256")
+    if type(certificate.kind) is not VerdictKind:
+        raise TypeError("certificate kind must be an exact VerdictKind")
+    _validate_commitment_tuple(certificate.compatible_completion_commitments)
+    _validate_certificate_targets(certificate.target_family)
+    if (
+        certificate.unknown_reason is not None
+        and type(certificate.unknown_reason) is not UnknownReason
+    ):
+        raise TypeError("certificate unknown_reason must be an exact UnknownReason")
+    _validate_ambiguity_commitments(certificate.ambiguity_commitments)
+    _validate_verdict_shape(certificate)
+    expected_root = canonical_digest(
+        _CERTIFICATE_FORMAT,
+        _certificate_proof_payload(certificate),
+    )
+    if certificate.proof_root != expected_root:
+        raise ValueError("certificate proof root contradicts its fields")
+
+
+def _validate_commitment_tuple(commitments: object) -> None:
+    if (
+        type(commitments) is not tuple
+        or not commitments
+        or any(not _is_sha256(value) for value in commitments)
+        or tuple(sorted(set(commitments))) != commitments
+    ):
+        raise ValueError("compatible completion commitments must be non-empty, unique, and sorted")
+
+
+def _validate_certificate_targets(target_family: object) -> None:
+    if target_family is None:
+        return
+    if type(target_family) is not tuple or not target_family:
+        raise ValueError("certificate target_family must be a non-empty exact tuple")
+    for target_set in target_family:
+        if (
+            type(target_set) is not tuple
+            or not target_set
+            or any(
+                type(target) is not str or not _IDENTIFIER.fullmatch(target)
+                for target in target_set
+            )
+            or tuple(sorted(set(target_set))) != target_set
+        ):
+            raise ValueError("certificate target sets must be unique sorted identifiers")
+    if tuple(sorted(set(target_family))) != target_family:
+        raise ValueError("certificate target_family must be unique and sorted")
+
+
+def _validate_ambiguity_commitments(commitments: object) -> None:
+    if commitments is None:
+        return
+    if (
+        type(commitments) is not tuple
+        or len(commitments) != _PAIR_SIZE
+        or any(not _is_sha256(value) for value in commitments)
+        or commitments[0] >= commitments[1]
+    ):
+        raise ValueError("ambiguity commitments must be two distinct sorted SHA-256 digests")
+
+
+def _validate_verdict_shape(certificate: VerifiedAttribution) -> None:
+    if certificate.kind is VerdictKind.NOT_IDENTIFIABLE:
+        if certificate.target_family is not None or certificate.unknown_reason is None:
+            raise ValueError("not_identifiable requires one reason and no target family")
+        needs_pair = certificate.unknown_reason is UnknownReason.AMBIGUOUS_WORLDS
+        if needs_pair != (certificate.ambiguity_commitments is not None):
+            raise ValueError("ambiguous-world verdicts require exactly one ambiguity pair")
+        return
+    if certificate.kind is VerdictKind.EFFECT_ONLY:
+        if (
+            certificate.target_family is not None
+            or certificate.unknown_reason is not None
+            or certificate.ambiguity_commitments is not None
+        ):
+            raise ValueError("effect_only cannot contain target or unknown fields")
+        return
+    if (
+        certificate.target_family is None
+        or certificate.unknown_reason is not None
+        or certificate.ambiguity_commitments is not None
+    ):
+        raise ValueError("identified verdicts require targets and no unknown fields")
+    family = certificate.target_family
+    if certificate.kind is VerdictKind.IDENTIFIED_SINGLETON and not (
+        len(family) == 1 and len(family[0]) == 1
+    ):
+        raise ValueError("identified_singleton requires one singleton target set")
+    if certificate.kind is VerdictKind.IDENTIFIED_COMPOUND and not (
+        len(family) == 1 and len(family[0]) > 1
+    ):
+        raise ValueError("identified_compound requires one multi-target set")
+    if (
+        certificate.kind is VerdictKind.ALTERNATIVE_MINIMAL_REPAIRS
+        and len(family) < _MIN_ALTERNATIVES
+    ):
+        raise ValueError("alternative_minimal_repairs requires multiple target sets")
+
+
+def _parse_attribution_certificate(payload: bytes) -> VerifiedAttribution:
+    if type(payload) is not bytes:
+        raise TypeError("certificate payload must be exact bytes")
+    try:
+        raw: object = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("certificate is not valid UTF-8 JSON") from error
+    expected_fields = {
+        "adapter_implementation_digest",
+        "ambiguity_commitments",
+        "compatible_completion_commitments",
+        "evidence_digest",
+        "format",
+        "kind",
+        "panel_root",
+        "proof_root",
+        "registry_digest",
+        "target_family",
+        "trust_anchor_digest",
+        "unknown_reason",
+        "verifier_implementation_digest",
+    }
+    try:
+        canonical = type(raw) is dict and canonical_json(cast(JsonValue, raw)) == payload
+    except TypeError as error:
+        raise ValueError("certificate contains unsupported JSON values") from error
+    if not canonical or set(cast(dict[str, object], raw)) != expected_fields:
+        raise ValueError("certificate is not one closed canonical JSON object")
+    value = cast(dict[str, object], raw)
+    if value["format"] != _CERTIFICATE_FORMAT:
+        raise ValueError("certificate format is unsupported")
+    try:
+        kind = VerdictKind(_certificate_string(value, "kind"))
+    except ValueError as error:
+        raise ValueError("certificate kind is unsupported") from error
+    unknown_raw = value["unknown_reason"]
+    try:
+        unknown_reason = (
+            None
+            if unknown_raw is None
+            else UnknownReason(_exact_string(unknown_raw, field="unknown_reason"))
+        )
+    except ValueError as error:
+        raise ValueError("certificate unknown reason is unsupported") from error
+    certificate = VerifiedAttribution(
+        registry_digest=_certificate_string(value, "registry_digest"),
+        evidence_digest=_certificate_string(value, "evidence_digest"),
+        adapter_implementation_digest=_certificate_string(
+            value,
+            "adapter_implementation_digest",
+        ),
+        verifier_implementation_digest=_certificate_string(
+            value,
+            "verifier_implementation_digest",
+        ),
+        trust_anchor_digest=_certificate_string(value, "trust_anchor_digest"),
+        panel_root=_certificate_string(value, "panel_root"),
+        proof_root=_certificate_string(value, "proof_root"),
+        kind=kind,
+        compatible_completion_commitments=_string_tuple(
+            value["compatible_completion_commitments"],
+            field="compatible_completion_commitments",
+        ),
+        target_family=_target_family(value["target_family"]),
+        unknown_reason=unknown_reason,
+        ambiguity_commitments=_ambiguity_pair(value["ambiguity_commitments"]),
+    )
+    if certificate.to_canonical_bytes() != payload:
+        raise ValueError("certificate failed canonical round-trip")
+    return certificate
+
+
+def _certificate_string(raw: dict[str, object], field: str) -> str:
+    return _exact_string(raw[field], field=field)
+
+
+def _exact_string(value: object, *, field: str) -> str:
+    if type(value) is not str:
+        raise ValueError(f"certificate field {field!r} must be a string")
+    return value
+
+
+def _string_tuple(value: object, *, field: str) -> tuple[str, ...]:
+    if type(value) is not list or any(type(item) is not str for item in value):
+        raise ValueError(f"certificate field {field!r} must be an array of strings")
+    return tuple(cast(list[str], value))
+
+
+def _target_family(value: object) -> TargetFamily | None:
+    if value is None:
+        return None
+    if type(value) is not list or any(type(item) is not list for item in value):
+        raise ValueError("certificate target_family must be an array of arrays")
+    return tuple(
+        _string_tuple(target_set, field="target_family") for target_set in cast(list[object], value)
+    )
+
+
+def _ambiguity_pair(value: object) -> tuple[str, str] | None:
+    if value is None:
+        return None
+    pair = _string_tuple(value, field="ambiguity_commitments")
+    if len(pair) != _PAIR_SIZE:
+        raise ValueError("certificate ambiguity_commitments must contain two values")
+    return pair[0], pair[1]
+
+
+def _is_sha256(value: object) -> bool:
+    return (
+        type(value) is str
+        and len(value) == _SHA256_HEX_LENGTH
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
 def verifier_implementation_digest() -> str:
     """Digest the exact installed modules that implement certificate checks."""
 
     return package_implementation_digest(
         "witnessgap.verifier-implementation.v1",
         _VERIFIER_IMPLEMENTATION_PATHS,
+    )
+
+
+def trust_anchor_for_manifest(manifest: RegistryManifest) -> VerificationTrustAnchor:
+    """Author an anchor for external review; verification never creates its own."""
+
+    manifest = _normalize_manifest(manifest)
+    try:
+        resolve_trusted_adapter(
+            manifest.adapter_id,
+            expected_implementation_digest=manifest.adapter_implementation_digest,
+        )
+    except TrustedAdapterError as error:
+        raise VerificationError(str(error)) from error
+    return VerificationTrustAnchor(
+        registry_digest=manifest.digest,
+        adapter_implementation_digest=manifest.adapter_implementation_digest,
+        verifier_implementation_digest=verifier_implementation_digest(),
     )
 
 

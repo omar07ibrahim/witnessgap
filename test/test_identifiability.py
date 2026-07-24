@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import cast
 
 import pytest
 
@@ -394,6 +395,24 @@ def test_manifest_constructor_rejects_duplicate_candidate_commitments() -> None:
 
     with pytest.raises(RegistryError, match="candidate_commitments"):
         replace(manifest, candidate_commitments=(duplicate, duplicate))
+
+
+def test_evidence_rejects_tuple_subclasses_at_the_input_boundary() -> None:
+    class ProbeTuple(tuple[ProbeObservation, ...]):
+        pass
+
+    registry = CandidateRegistry.build(workspace_twins())
+    baseline = registry.observe(workspace_twins()[0].world_id)
+    probes = ProbeTuple((ProbeObservation("workspace_owner", b"owner"),))
+
+    with pytest.raises(TypeError, match="exact ProbeObservation"):
+        Evidence(
+            registry_digest=baseline.registry_digest,
+            coverage_manifest_digest=baseline.coverage_manifest_digest,
+            public_trace=baseline.public_trace,
+            outcome=baseline.outcome,
+            probes=cast(tuple[ProbeObservation, ...], probes),
+        )
 
 
 def test_workspace_completion_ids_are_opaque() -> None:

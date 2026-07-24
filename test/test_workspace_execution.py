@@ -27,7 +27,7 @@ def test_fresh_workspace_runners_are_byte_deterministic(cause: WorkspaceCause) -
 
     assert first == second
     assert first.source_snapshot_digest == source.sealed_source.snapshot_digest
-    assert source.evaluate_terminal(first.terminal_state) is Outcome.FAILURE
+    assert source.validate_artifact(first) is Outcome.FAILURE
 
 
 def test_workspace_runner_is_single_use() -> None:
@@ -73,10 +73,6 @@ def test_runner_records_exactly_the_requested_interventions() -> None:
     assert artifact.intervention_log == (
         "refresh_draft_store",
         "repair_draft_selection",
-    )
-    assert (
-        world(WorkspaceCause.ENVIRONMENT).evaluate_terminal(artifact.terminal_state)
-        is Outcome.SUCCESS
     )
     assert world(WorkspaceCause.ENVIRONMENT).validate_artifact(artifact) is Outcome.SUCCESS
 
@@ -127,6 +123,7 @@ def test_success_oracle_rejects_noncanonical_or_contradictory_state(
     terminal_state: bytes,
 ) -> None:
     source = world(WorkspaceCause.POLICY)
+    artifact = source.fresh_runner().run(frozenset())
 
     with pytest.raises(ValueError, match="terminal state"):
-        source.evaluate_terminal(terminal_state)
+        source.validate_artifact(replace(artifact, terminal_state=terminal_state))

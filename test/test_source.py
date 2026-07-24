@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import cast
+from typing import Self, cast
 
 import pytest
 
@@ -13,6 +13,25 @@ from witnessgap.worlds.workspace import (
 )
 
 
+class CommitmentSplice(bytes):
+    """Regression helper for a bytes-subclass commitment substitution."""
+
+    forged_concatenation: bytes
+
+    def __new__(
+        cls,
+        value: bytes,
+        forged_concatenation: bytes,
+    ) -> Self:
+        instance = super().__new__(cls, value)
+        instance.forged_concatenation = forged_concatenation
+        return instance
+
+    def __add__(self, other: object) -> bytes:
+        del other
+        return self.forged_concatenation
+
+
 def test_source_commitment_binds_bytes_and_salt_separately() -> None:
     source = workspace_source(WorkspaceCause.ENVIRONMENT)
     changed_bytes = replace(source, source_bytes=source.source_bytes + b" ")
@@ -22,6 +41,34 @@ def test_source_commitment_binds_bytes_and_salt_separately() -> None:
     assert changed_bytes.completion_commitment != source.completion_commitment
     assert changed_salt.snapshot_digest == source.snapshot_digest
     assert changed_salt.completion_commitment != source.completion_commitment
+
+
+def test_source_rejects_a_bytes_subclass_that_splices_another_commitment() -> None:
+    environment = workspace_source(WorkspaceCause.ENVIRONMENT)
+    policy = workspace_source(WorkspaceCause.POLICY)
+    spliced_salt = CommitmentSplice(
+        policy.commitment_salt,
+        environment.commitment_salt + environment.source_bytes,
+    )
+
+    with pytest.raises(TypeError, match="exact bytes"):
+        SealedWorldSource(
+            source_bytes=policy.source_bytes,
+            commitment_salt=spliced_salt,
+        )
+
+
+def test_runtime_validation_rejects_a_spliced_salt_after_object_mutation() -> None:
+    environment = workspace_source(WorkspaceCause.ENVIRONMENT)
+    policy = workspace_source(WorkspaceCause.POLICY)
+    spliced_salt = CommitmentSplice(
+        policy.commitment_salt,
+        environment.commitment_salt + environment.source_bytes,
+    )
+    object.__setattr__(policy, "commitment_salt", spliced_salt)
+
+    with pytest.raises(TypeError, match="exact bytes"):
+        policy.validate()
 
 
 @pytest.mark.parametrize(

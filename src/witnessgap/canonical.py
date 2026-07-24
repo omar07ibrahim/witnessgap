@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
 from hashlib import sha256
+from typing import cast
 
 type JsonScalar = str | int | bool | None
-type JsonValue = JsonScalar | Sequence[JsonValue] | Mapping[str, JsonValue]
+type JsonValue = JsonScalar | list[JsonValue] | tuple[JsonValue, ...] | dict[str, JsonValue]
 
 _DIGEST_MAGIC = b"WGCP"
 _DIGEST_VERSION = 1
@@ -34,6 +34,10 @@ def canonical_json(value: JsonValue) -> bytes:
 def tagged_digest(domain: str, payload: bytes) -> str:
     """Hash bytes with length-framed semantic domain separation."""
 
+    if type(domain) is not str:
+        raise TypeError("digest domain must be an exact string")
+    if type(payload) is not bytes:
+        raise TypeError("digest payload must be exact bytes")
     if not domain or "\0" in domain:
         raise ValueError("digest domain must be non-empty and cannot contain NUL")
     try:
@@ -64,14 +68,20 @@ def canonical_digest(domain: str, value: JsonValue) -> str:
 
 
 def _validate_json(value: JsonValue) -> None:
-    if isinstance(value, float):
+    if type(value) is float:
         raise TypeError("canonical JSON forbids floating-point values")
-    if isinstance(value, Mapping):
-        if any(not isinstance(key, str) for key in value):
-            raise TypeError("canonical JSON object keys must be strings")
-        for item in value.values():
+    if value is None or type(value) in {str, int, bool}:
+        return
+    if type(value) is dict:
+        mapping = value
+        if any(type(key) is not str for key in mapping):
+            raise TypeError("canonical JSON object keys must be exact strings")
+        for item in mapping.values():
             _validate_json(item)
         return
-    if isinstance(value, Sequence) and not isinstance(value, str):
-        for item in value:
+    if type(value) in {list, tuple}:
+        sequence = cast(list[JsonValue] | tuple[JsonValue, ...], value)
+        for item in sequence:
             _validate_json(item)
+        return
+    raise TypeError(f"canonical JSON does not support {type(value).__name__}")

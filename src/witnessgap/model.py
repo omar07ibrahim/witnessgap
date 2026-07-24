@@ -12,7 +12,7 @@ _SHA256_HEX_LENGTH = 64
 
 
 def _require_identifier(value: str, *, field: str) -> None:
-    if not isinstance(value, str) or not _IDENTIFIER.fullmatch(value):
+    if type(value) is not str or not _IDENTIFIER.fullmatch(value):
         raise ValueError(f"{field} must match {_IDENTIFIER.pattern!r}: {value!r}")
 
 
@@ -48,12 +48,12 @@ class ReplayResult:
     state_reads: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        if not isinstance(self.public_trace, bytes):
-            raise TypeError("public_trace must be bytes")
-        if not isinstance(self.outcome, Outcome):
-            raise TypeError("outcome must be an Outcome")
-        if not isinstance(self.state_reads, tuple):
-            raise TypeError("state_reads must be a tuple")
+        if type(self.public_trace) is not bytes:
+            raise TypeError("public_trace must be exact bytes")
+        if type(self.outcome) is not Outcome:
+            raise TypeError("outcome must be an exact Outcome")
+        if type(self.state_reads) is not tuple:
+            raise TypeError("state_reads must be an exact tuple")
         for channel in self.state_reads:
             _require_identifier(channel, field="state channel")
         if tuple(sorted(set(self.state_reads))) != self.state_reads:
@@ -69,11 +69,18 @@ class StateRead:
     value_digest: str
 
     def __post_init__(self) -> None:
+        self.validate()
+
+    def validate(self) -> None:
+        if type(self.sequence) is not int:
+            raise TypeError("state-read sequence must be an exact integer")
         if self.sequence < 0:
             raise ValueError("state-read sequence cannot be negative")
         _require_identifier(self.channel, field="state channel")
-        if len(self.value_digest) != _SHA256_HEX_LENGTH or any(
-            character not in "0123456789abcdef" for character in self.value_digest
+        if (
+            type(self.value_digest) is not str
+            or len(self.value_digest) != _SHA256_HEX_LENGTH
+            or any(character not in "0123456789abcdef" for character in self.value_digest)
         ):
             raise ValueError("state-read value_digest must be lowercase SHA-256")
 
@@ -89,12 +96,27 @@ class ExecutionArtifact:
     intervention_log: tuple[str, ...]
 
     def __post_init__(self) -> None:
-        if len(self.source_snapshot_digest) != _SHA256_HEX_LENGTH or any(
-            character not in "0123456789abcdef" for character in self.source_snapshot_digest
+        self.validate()
+
+    def validate(self) -> None:
+        if (
+            type(self.source_snapshot_digest) is not str
+            or len(self.source_snapshot_digest) != _SHA256_HEX_LENGTH
+            or any(character not in "0123456789abcdef" for character in self.source_snapshot_digest)
         ):
             raise ValueError("source_snapshot_digest must be lowercase SHA-256")
-        if not isinstance(self.public_trace, bytes) or not isinstance(self.terminal_state, bytes):
-            raise TypeError("execution trace and terminal state must be bytes")
+        if type(self.public_trace) is not bytes or type(self.terminal_state) is not bytes:
+            raise TypeError("execution trace and terminal state must be exact bytes")
+        if type(self.state_read_log) is not tuple or any(
+            type(read) is not StateRead for read in self.state_read_log
+        ):
+            raise TypeError("state_read_log must contain exact StateRead values")
+        for read in self.state_read_log:
+            read.validate()
+        if type(self.intervention_log) is not tuple:
+            raise TypeError("intervention_log must be an exact tuple")
+        for intervention in self.intervention_log:
+            _require_identifier(intervention, field="intervention name")
         sequences = tuple(read.sequence for read in self.state_read_log)
         if sequences != tuple(range(len(self.state_read_log))):
             raise ValueError("state-read sequence must be contiguous and start at zero")

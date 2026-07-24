@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
-from witnessgap.canonical import canonical_digest, canonical_json, tagged_digest
+from witnessgap.canonical import JsonValue, canonical_digest, canonical_json, tagged_digest
 
 
 def test_canonical_json_is_order_independent_and_newline_terminated() -> None:
@@ -22,7 +24,7 @@ def test_canonical_json_is_order_independent_and_newline_terminated() -> None:
 )
 def test_canonical_json_rejects_floats(value: object) -> None:
     with pytest.raises(TypeError, match="floating-point"):
-        canonical_json(value)  # type: ignore[arg-type]
+        canonical_json(cast(JsonValue, value))
 
 
 def test_digest_domains_are_separated() -> None:
@@ -47,3 +49,19 @@ def test_canonical_digest_combines_encoding_and_domain_framing() -> None:
         "claim",
         {"value": 1},
     )
+
+
+def test_digest_rejects_bytes_subclasses_at_the_framing_boundary() -> None:
+    class BytesSubclass(bytes):
+        pass
+
+    with pytest.raises(TypeError, match="exact bytes"):
+        tagged_digest("snapshot", BytesSubclass(b"payload"))
+
+
+def test_canonical_json_rejects_container_subclasses() -> None:
+    class TupleSubclass(tuple[object, ...]):
+        pass
+
+    with pytest.raises(TypeError, match="does not support"):
+        canonical_json(cast(JsonValue, TupleSubclass(("safe",))))

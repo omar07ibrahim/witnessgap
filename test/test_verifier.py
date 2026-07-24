@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from typing import cast
 
 import pytest
 
+from witnessgap.canonical import JsonValue, canonical_json
 from witnessgap.identifiability import (
     CandidateRegistry,
     Evidence,
@@ -15,7 +17,10 @@ from witnessgap.model import Outcome
 from witnessgap.source import SealedWorldSource
 from witnessgap.verifier import (
     VerificationError,
+    VerifiedAttribution,
     evidence_digest,
+    trust_anchor_for_manifest,
+    verify_attribution_certificate,
     verify_registry_attribution,
     verify_source_panel,
 )
@@ -38,7 +43,7 @@ def verify(evidence: Evidence) -> tuple[CandidateRegistry, object]:
     verdict = verify_registry_attribution(
         workspace_sources(),
         manifest=registry.manifest,
-        trusted_registry_digest=registry.manifest.digest,
+        trust_anchor=trust_anchor_for_manifest(registry.manifest),
         evidence=evidence,
     )
     return registry, verdict
@@ -52,7 +57,7 @@ def test_independent_verifier_reconstructs_the_ambiguity_witness() -> None:
     verified = verify_registry_attribution(
         workspace_sources(),
         manifest=registry.manifest,
-        trusted_registry_digest=registry.manifest.digest,
+        trust_anchor=trust_anchor_for_manifest(registry.manifest),
         evidence=evidence,
     )
 
@@ -101,7 +106,7 @@ def test_independent_verifier_reconstructs_identified_views(
     verified = verify_registry_attribution(
         workspace_sources(),
         manifest=registry.manifest,
-        trusted_registry_digest=registry.manifest.digest,
+        trust_anchor=trust_anchor_for_manifest(registry.manifest),
         evidence=evidence,
     )
 
@@ -158,7 +163,7 @@ def test_solver_cache_mutation_cannot_change_the_verified_result() -> None:
     verified = verify_registry_attribution(
         workspace_sources(),
         manifest=registry.manifest,
-        trusted_registry_digest=registry.manifest.digest,
+        trust_anchor=trust_anchor_for_manifest(registry.manifest),
         evidence=evidence,
     )
 
@@ -171,19 +176,20 @@ def test_verifier_requires_an_external_trust_anchor_and_complete_sources() -> No
     worlds = workspace_twins()
     registry = CandidateRegistry.build(worlds)
     evidence = registry.observe(worlds[0].world_id)
+    genuine_anchor = trust_anchor_for_manifest(registry.manifest)
 
-    with pytest.raises(VerificationError, match="trusted digest"):
+    with pytest.raises(VerificationError, match="trust anchor"):
         verify_registry_attribution(
             workspace_sources(),
             manifest=registry.manifest,
-            trusted_registry_digest="0" * 64,
+            trust_anchor=replace(genuine_anchor, registry_digest="0" * 64),
             evidence=evidence,
         )
     with pytest.raises(VerificationError, match="exhaust"):
         verify_registry_attribution(
             (workspace_sources()[0],),
             manifest=registry.manifest,
-            trusted_registry_digest=registry.manifest.digest,
+            trust_anchor=trust_anchor_for_manifest(registry.manifest),
             evidence=evidence,
         )
 
@@ -197,7 +203,7 @@ def test_verifier_rejects_executable_world_objects_at_the_input_boundary() -> No
         verify_registry_attribution(
             cast(tuple[SealedWorldSource, ...], worlds),
             manifest=registry.manifest,
-            trusted_registry_digest=registry.manifest.digest,
+            trust_anchor=trust_anchor_for_manifest(registry.manifest),
             evidence=evidence,
         )
 
@@ -213,7 +219,7 @@ def test_source_byte_mutation_breaks_the_committed_candidate_family() -> None:
         verify_registry_attribution(
             (mutated, sources[1]),
             manifest=registry.manifest,
-            trusted_registry_digest=registry.manifest.digest,
+            trust_anchor=trust_anchor_for_manifest(registry.manifest),
             evidence=evidence,
         )
 
@@ -226,12 +232,16 @@ def test_verifier_rejects_an_adapter_not_in_its_internal_trust_store() -> None:
         registry.observe(worlds[0].world_id),
         registry_digest=forged_manifest.digest,
     )
+    forged_anchor = replace(
+        trust_anchor_for_manifest(registry.manifest),
+        registry_digest=forged_manifest.digest,
+    )
 
     with pytest.raises(VerificationError, match="not trusted"):
         verify_registry_attribution(
             workspace_sources(),
             manifest=forged_manifest,
-            trusted_registry_digest=forged_manifest.digest,
+            trust_anchor=forged_anchor,
             evidence=evidence,
         )
 
@@ -247,12 +257,17 @@ def test_verifier_rejects_an_untrusted_adapter_implementation_digest() -> None:
         registry.observe(worlds[0].world_id),
         registry_digest=forged_manifest.digest,
     )
+    forged_anchor = replace(
+        trust_anchor_for_manifest(registry.manifest),
+        registry_digest=forged_manifest.digest,
+        adapter_implementation_digest=forged_manifest.adapter_implementation_digest,
+    )
 
     with pytest.raises(VerificationError, match="installed adapter implementation"):
         verify_registry_attribution(
             workspace_sources(),
             manifest=forged_manifest,
-            trusted_registry_digest=forged_manifest.digest,
+            trust_anchor=forged_anchor,
             evidence=evidence,
         )
 
@@ -269,12 +284,16 @@ def test_verifier_rejects_undeclared_probe_before_source_replay() -> None:
         registry_digest=forged_manifest.digest,
         probes=(ProbeObservation(name="cause", value=b"environment"),),
     )
+    forged_anchor = replace(
+        trust_anchor_for_manifest(registry.manifest),
+        registry_digest=forged_manifest.digest,
+    )
 
     with pytest.raises(VerificationError, match="undeclared probes"):
         verify_registry_attribution(
             workspace_sources(),
             manifest=forged_manifest,
-            trusted_registry_digest=forged_manifest.digest,
+            trust_anchor=forged_anchor,
             evidence=evidence,
         )
 
@@ -293,7 +312,7 @@ def test_verifier_revalidates_nested_evidence_at_runtime() -> None:
         verify_registry_attribution(
             workspace_sources(),
             manifest=registry.manifest,
-            trusted_registry_digest=registry.manifest.digest,
+            trust_anchor=trust_anchor_for_manifest(registry.manifest),
             evidence=evidence,
         )
 
@@ -302,6 +321,7 @@ def test_verifier_revalidates_the_manifest_at_runtime() -> None:
     worlds = workspace_twins()
     registry = CandidateRegistry.build(worlds)
     evidence = registry.observe(worlds[0].world_id)
+    genuine_anchor = trust_anchor_for_manifest(registry.manifest)
     duplicate = registry.manifest.candidate_commitments[0]
     object.__setattr__(
         registry.manifest,
@@ -313,7 +333,7 @@ def test_verifier_revalidates_the_manifest_at_runtime() -> None:
         verify_registry_attribution(
             workspace_sources(),
             manifest=registry.manifest,
-            trusted_registry_digest=evidence.registry_digest,
+            trust_anchor=genuine_anchor,
             evidence=evidence,
         )
 
@@ -326,13 +346,13 @@ def test_proof_roots_are_byte_deterministic() -> None:
     first = verify_registry_attribution(
         workspace_sources(),
         manifest=registry.manifest,
-        trusted_registry_digest=registry.manifest.digest,
+        trust_anchor=trust_anchor_for_manifest(registry.manifest),
         evidence=evidence,
     )
     second = verify_registry_attribution(
         workspace_sources(),
         manifest=registry.manifest,
-        trusted_registry_digest=registry.manifest.digest,
+        trust_anchor=trust_anchor_for_manifest(registry.manifest),
         evidence=evidence,
     )
 
@@ -351,13 +371,13 @@ def test_certificate_root_binds_evidence_even_when_panel_compatibility_is_equal(
     trace_certificate = verify_registry_attribution(
         workspace_sources(),
         manifest=registry.manifest,
-        trusted_registry_digest=registry.manifest.digest,
+        trust_anchor=trust_anchor_for_manifest(registry.manifest),
         evidence=trace_only,
     )
     owner_certificate = verify_registry_attribution(
         workspace_sources(),
         manifest=registry.manifest,
-        trusted_registry_digest=registry.manifest.digest,
+        trust_anchor=trust_anchor_for_manifest(registry.manifest),
         evidence=owner_probe,
     )
 
@@ -367,3 +387,71 @@ def test_certificate_root_binds_evidence_even_when_panel_compatibility_is_equal(
     assert trace_certificate.panel_root == owner_certificate.panel_root
     assert trace_certificate.evidence_digest != owner_certificate.evidence_digest
     assert trace_certificate.proof_root != owner_certificate.proof_root
+
+
+def test_certificate_record_round_trips_against_pinned_release_digests() -> None:
+    worlds = workspace_twins()
+    registry = CandidateRegistry.build(worlds)
+    anchor = trust_anchor_for_manifest(registry.manifest)
+    evidence = registry.observe(worlds[0].world_id)
+    certificate = verify_registry_attribution(
+        workspace_sources(),
+        manifest=registry.manifest,
+        trust_anchor=anchor,
+        evidence=evidence,
+    )
+
+    encoded = certificate.to_canonical_bytes()
+    parsed = verify_attribution_certificate(
+        encoded,
+        trust_anchor=anchor,
+        expected_proof_root=certificate.proof_root,
+    )
+
+    assert parsed == certificate
+    assert VerifiedAttribution.from_canonical_bytes(encoded) == certificate
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("registry_digest", "0" * 64),
+        ("evidence_digest", "0" * 64),
+        ("adapter_implementation_digest", "0" * 64),
+        ("verifier_implementation_digest", "0" * 64),
+        ("trust_anchor_digest", "0" * 64),
+        ("panel_root", "0" * 64),
+        ("proof_root", "0" * 64),
+        ("kind", "effect_only"),
+        ("compatible_completion_commitments", ["0" * 64]),
+        ("target_family", [["environment"]]),
+        ("unknown_reason", "no_repair_in_declared_algebra"),
+        ("ambiguity_commitments", ["0" * 64, "1" * 64]),
+        ("format", "witnessgap.attribution-certificate.v2"),
+    ],
+)
+def test_certificate_parser_rejects_every_field_mutation(
+    field: str,
+    replacement: JsonValue,
+) -> None:
+    worlds = workspace_twins()
+    registry = CandidateRegistry.build(worlds)
+    anchor = trust_anchor_for_manifest(registry.manifest)
+    evidence = registry.observe(worlds[0].world_id)
+    certificate = verify_registry_attribution(
+        workspace_sources(),
+        manifest=registry.manifest,
+        trust_anchor=anchor,
+        evidence=evidence,
+    )
+    raw: object = json.loads(certificate.to_canonical_bytes())
+    assert type(raw) is dict
+    mutated = cast(dict[str, JsonValue], raw)
+    mutated[field] = replacement
+
+    with pytest.raises((TypeError, ValueError, VerificationError)):
+        verify_attribution_certificate(
+            canonical_json(mutated),
+            trust_anchor=anchor,
+            expected_proof_root=certificate.proof_root,
+        )

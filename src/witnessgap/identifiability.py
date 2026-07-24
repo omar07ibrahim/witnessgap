@@ -90,8 +90,8 @@ class ProbeObservation:
 
     def __post_init__(self) -> None:
         _require_identifier(self.name, field="probe name")
-        if not isinstance(self.value, bytes):
-            raise TypeError("probe value must be bytes")
+        if type(self.value) is not bytes:
+            raise TypeError("probe value must be exact bytes")
 
 
 @dataclass(frozen=True, order=True, slots=True)
@@ -104,10 +104,10 @@ class InterventionObservation:
 
     def __post_init__(self) -> None:
         _validate_intervention_set(self.interventions)
-        if not isinstance(self.public_trace, bytes):
-            raise TypeError("intervention public_trace must be bytes")
-        if not isinstance(self.outcome, Outcome):
-            raise TypeError("intervention outcome must be an Outcome")
+        if type(self.public_trace) is not bytes:
+            raise TypeError("intervention public_trace must be exact bytes")
+        if type(self.outcome) is not Outcome:
+            raise TypeError("intervention outcome must be an exact Outcome")
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,29 +137,29 @@ def _validate_evidence_header(evidence: Evidence) -> None:
         raise ValueError("registry_digest must be a lowercase SHA-256 digest")
     if not _is_sha256(evidence.coverage_manifest_digest):
         raise ValueError("coverage_manifest_digest must be a lowercase SHA-256 digest")
-    if not isinstance(evidence.public_trace, bytes):
-        raise TypeError("evidence public_trace must be bytes")
-    if not isinstance(evidence.outcome, Outcome):
-        raise TypeError("evidence outcome must be an Outcome")
+    if type(evidence.public_trace) is not bytes:
+        raise TypeError("evidence public_trace must be exact bytes")
+    if type(evidence.outcome) is not Outcome:
+        raise TypeError("evidence outcome must be an exact Outcome")
 
 
 def _validate_probe_observations(probes: object) -> None:
-    if not isinstance(probes, tuple) or any(
+    if type(probes) is not tuple or any(
         type(observation) is not ProbeObservation for observation in probes
     ):
         raise TypeError("probes must be a tuple of exact ProbeObservation values")
     typed_probes = cast(tuple[ProbeObservation, ...], probes)
     for observation in typed_probes:
         _require_identifier(observation.name, field="probe name")
-        if not isinstance(observation.value, bytes):
-            raise TypeError("probe value must be bytes")
+        if type(observation.value) is not bytes:
+            raise TypeError("probe value must be exact bytes")
     probe_names = tuple(observation.name for observation in typed_probes)
     if tuple(sorted(set(probe_names))) != probe_names:
         raise ValueError("probe observations must be unique and sorted by name")
 
 
 def _validate_intervention_observations(observations: object) -> None:
-    if not isinstance(observations, tuple) or any(
+    if type(observations) is not tuple or any(
         type(observation) is not InterventionObservation for observation in observations
     ):
         raise TypeError(
@@ -168,10 +168,10 @@ def _validate_intervention_observations(observations: object) -> None:
     typed_observations = cast(tuple[InterventionObservation, ...], observations)
     for observation in typed_observations:
         _validate_intervention_set(observation.interventions)
-        if not isinstance(observation.public_trace, bytes):
-            raise TypeError("intervention public_trace must be bytes")
-        if not isinstance(observation.outcome, Outcome):
-            raise TypeError("intervention outcome must be an Outcome")
+        if type(observation.public_trace) is not bytes:
+            raise TypeError("intervention public_trace must be exact bytes")
+        if type(observation.outcome) is not Outcome:
+            raise TypeError("intervention outcome must be an exact Outcome")
     intervention_sets = tuple(observation.interventions for observation in typed_observations)
     if tuple(sorted(set(intervention_sets))) != intervention_sets:
         raise ValueError("intervention observations must be unique and sorted")
@@ -282,7 +282,7 @@ class RegistryManifest:
             field="adapter_id",
             error_type=RegistryError,
         )
-        if not isinstance(self.atoms, tuple) or any(
+        if type(self.atoms) is not tuple or any(
             type(atom) is not InterventionAtom for atom in self.atoms
         ):
             raise RegistryError("atoms must contain exact InterventionAtom values")
@@ -325,9 +325,9 @@ class RegistryManifest:
         if not all(_is_sha256(digest) for digest in digests):
             raise RegistryError("manifest contract fields must be lowercase SHA-256 digests")
         if (
-            not isinstance(self.candidate_commitments, tuple)
+            type(self.candidate_commitments) is not tuple
             or not self.candidate_commitments
-            or any(not isinstance(commitment, str) for commitment in self.candidate_commitments)
+            or any(type(commitment) is not str for commitment in self.candidate_commitments)
             or tuple(sorted(set(self.candidate_commitments))) != self.candidate_commitments
             or not all(_is_sha256(digest) for digest in self.candidate_commitments)
         ):
@@ -404,15 +404,15 @@ class RegistryManifest:
         if raw["format"] != _REGISTRY_FORMAT:
             raise RegistryError("registry manifest format is unsupported")
         atoms_raw = raw["atoms"]
-        if not isinstance(atoms_raw, list):
+        if type(atoms_raw) is not list:
             raise RegistryError("registry atoms must be a JSON array")
         atoms: list[InterventionAtom] = []
         for raw_atom in atoms_raw:
-            if not isinstance(raw_atom, dict) or set(raw_atom) != {"name", "target"}:
+            if type(raw_atom) is not dict or set(raw_atom) != {"name", "target"}:
                 raise RegistryError("registry atom contains unknown or missing fields")
             name = raw_atom["name"]
             target = raw_atom["target"]
-            if not isinstance(name, str) or not isinstance(target, str):
+            if type(name) is not str or type(target) is not str:
                 raise RegistryError("registry atom fields must be strings")
             atoms.append(InterventionAtom(name=name, target=target))
         manifest = cls(
@@ -734,9 +734,9 @@ def _validated_panel(world: ProbeWorld) -> RepairPanel:
 
 def _validate_intervention_set(interventions: object) -> None:
     if (
-        not isinstance(interventions, tuple)
+        type(interventions) is not tuple
         or not interventions
-        or any(not isinstance(name, str) for name in interventions)
+        or any(type(name) is not str for name in interventions)
         or tuple(sorted(set(interventions))) != interventions
     ):
         raise ValueError("interventions must be a non-empty sorted tuple of unique names")
@@ -746,8 +746,8 @@ def _validate_intervention_set(interventions: object) -> None:
 
 def _validate_identifier_tuple(values: object, *, field: str) -> None:
     if (
-        not isinstance(values, tuple)
-        or any(not isinstance(value, str) for value in values)
+        type(values) is not tuple
+        or any(type(value) is not str for value in values)
         or tuple(sorted(set(values))) != values
     ):
         raise RegistryError(f"{field} must be a unique sorted tuple of identifiers")
@@ -761,7 +761,7 @@ def _require_identifier(
     field: str,
     error_type: type[ValueError] = ValueError,
 ) -> None:
-    if not isinstance(value, str) or not _IDENTIFIER.fullmatch(value):
+    if type(value) is not str or not _IDENTIFIER.fullmatch(value):
         raise error_type(f"{field} must match {_IDENTIFIER.pattern!r}: {value!r}")
 
 
@@ -771,19 +771,19 @@ def _require_format_id(
     field: str,
     error_type: type[ValueError] = ValueError,
 ) -> None:
-    if not isinstance(value, str) or not _FORMAT_ID.fullmatch(value):
+    if type(value) is not str or not _FORMAT_ID.fullmatch(value):
         raise error_type(f"{field} must match {_FORMAT_ID.pattern!r}: {value!r}")
 
 
 def _canonical_object(payload: bytes, *, label: str) -> dict[str, object]:
-    if not isinstance(payload, bytes):
-        raise RegistryError(f"{label} must be bytes")
+    if type(payload) is not bytes:
+        raise RegistryError(f"{label} must be exact bytes")
     try:
         value: object = json.loads(payload)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise RegistryError(f"{label} is not valid UTF-8 JSON") from error
     try:
-        is_canonical = isinstance(value, dict) and canonical_json(cast(JsonValue, value)) == payload
+        is_canonical = type(value) is dict and canonical_json(cast(JsonValue, value)) == payload
     except TypeError as error:
         raise RegistryError(f"{label} contains unsupported JSON values") from error
     if not is_canonical:
@@ -793,21 +793,21 @@ def _canonical_object(payload: bytes, *, label: str) -> dict[str, object]:
 
 def _required_string(raw: dict[str, object], field: str) -> str:
     value = raw[field]
-    if not isinstance(value, str):
+    if type(value) is not str:
         raise RegistryError(f"registry field {field!r} must be a string")
     return value
 
 
 def _required_string_tuple(raw: dict[str, object], field: str) -> tuple[str, ...]:
     value = raw[field]
-    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+    if type(value) is not list or any(type(item) is not str for item in value):
         raise RegistryError(f"registry field {field!r} must be an array of strings")
     return tuple(cast(list[str], value))
 
 
 def _is_sha256(value: object) -> bool:
     return (
-        isinstance(value, str)
+        type(value) is str
         and len(value) == _SHA256_HEX_LENGTH
         and all(character in "0123456789abcdef" for character in value)
     )
