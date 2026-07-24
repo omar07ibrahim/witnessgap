@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from dataclasses import replace
 from typing import cast
 
@@ -28,6 +29,8 @@ from witnessgap.workspace100.runtime import (
 _SEED = bytes.fromhex("713d96c0fcadb930599f4f4370df3484766872ac406f1c26c5a360a996f29ec5")
 _PAIR_COUNT = 50
 _SOURCE_COUNT = 100
+_ARTIFACT_COUNT = 400
+_FORGERIES_PER_ARTIFACT = 5
 _SHA256_HEX_LENGTH = 64
 _FORBIDDEN_PUBLIC_TERMS = (
     "environment",
@@ -240,6 +243,168 @@ def test_validator_rejects_a_twin_log_after_snapshot_rebinding(
     assert left_artifact.state_read_log != transplant.state_read_log
     with pytest.raises(ValueError, match="contradicts the sealed"):
         left.validate_artifact(transplant)
+
+
+def test_every_runtime_artifact_rejects_all_top_level_surface_forgeries(
+    corpus: Workspace100Corpus,
+) -> None:
+    artifact_count = 0
+    rejection_count = 0
+    for pair in corpus.pairs:
+        for world in workspace100_pair_worlds(pair):
+            atom_names = tuple(atom.name for atom in world.atoms)
+            intervention_subsets: tuple[frozenset[str], ...] = (
+                frozenset(),
+                frozenset((atom_names[0],)),
+                frozenset((atom_names[1],)),
+                frozenset(atom_names),
+            )
+            for interventions in intervention_subsets:
+                artifact = world.fresh_runner().run(interventions)
+                first_read = artifact.state_read_log[0]
+                toggled = interventions ^ frozenset((atom_names[0],))
+                for forged in (
+                    replace(
+                        artifact,
+                        source_snapshot_digest="0" * _SHA256_HEX_LENGTH,
+                    ),
+                    replace(
+                        artifact,
+                        public_trace=canonical_json({"forged": True}),
+                    ),
+                    replace(
+                        artifact,
+                        terminal_state=canonical_json(
+                            {
+                                "resolved_concrete_id": "forged_concrete_id",
+                                "success": False,
+                            }
+                        ),
+                    ),
+                    replace(
+                        artifact,
+                        state_read_log=(
+                            replace(
+                                first_read,
+                                value_digest="0" * _SHA256_HEX_LENGTH,
+                            ),
+                            *artifact.state_read_log[1:],
+                        ),
+                    ),
+                    replace(
+                        artifact,
+                        intervention_log=tuple(sorted(toggled)),
+                    ),
+                ):
+                    with pytest.raises(ValueError):
+                        world.validate_artifact(forged)
+                    rejection_count += 1
+                artifact_count += 1
+
+    assert artifact_count == _ARTIFACT_COUNT
+    assert rejection_count == _ARTIFACT_COUNT * _FORGERIES_PER_ARTIFACT
+
+
+def test_each_template_rejects_closed_trace_terminal_and_read_log_splices(
+    corpus: Workspace100Corpus,
+) -> None:
+    representative_pairs = corpus.pairs[::10]
+
+    for pair in representative_pairs:
+        world = workspace100_pair_worlds(pair)[0]
+        artifact = world.fresh_runner().run(frozenset())
+        trace = cast(dict[str, object], json.loads(artifact.public_trace))
+        forged_traces: list[bytes] = []
+
+        payload = deepcopy(trace)
+        payload["unknown_field"] = "forged"
+        forged_traces.append(canonical_json(cast(JsonValue, payload)))
+
+        payload = deepcopy(trace)
+        del payload["terminal"]
+        forged_traces.append(canonical_json(cast(JsonValue, payload)))
+
+        payload = deepcopy(trace)
+        payload["task"] = "Perform an unrelated workspace operation."
+        forged_traces.append(canonical_json(cast(JsonValue, payload)))
+
+        payload = deepcopy(trace)
+        payload["terminal"] = world.template.terminal_success
+        forged_traces.append(canonical_json(cast(JsonValue, payload)))
+
+        payload = deepcopy(trace)
+        payload["interventions"] = [world.template.refresh_atom]
+        forged_traces.append(canonical_json(cast(JsonValue, payload)))
+
+        for event_index, field, value in (
+            (0, "tool", "forged_lookup"),
+            (1, "tool", "forged_action"),
+        ):
+            payload = deepcopy(trace)
+            events = cast(list[dict[str, object]], payload["events"])
+            events[event_index][field] = value
+            forged_traces.append(canonical_json(cast(JsonValue, payload)))
+
+        for event_index, section, field, value in (
+            (0, "arguments", "workspace", "forged_workspace"),
+            (0, "result", "concrete_id", "forged_concrete_id"),
+            (1, "arguments", "subject_id", "forged_subject"),
+            (1, "result", "status", "forged_status"),
+        ):
+            payload = deepcopy(trace)
+            events = cast(list[dict[str, object]], payload["events"])
+            nested = cast(dict[str, object], events[event_index][section])
+            nested[field] = value
+            forged_traces.append(canonical_json(cast(JsonValue, payload)))
+
+        for forged_trace in forged_traces:
+            with pytest.raises(ValueError, match="contradicts the sealed"):
+                world.validate_artifact(replace(artifact, public_trace=forged_trace))
+
+        terminal = cast(dict[str, object], json.loads(artifact.terminal_state))
+        forged_terminals: list[bytes] = []
+        terminal_mutations: tuple[tuple[str, object], ...] = (
+            ("resolved_concrete_id", "forged_concrete_id"),
+            ("success", True),
+            ("unknown_field", "forged"),
+        )
+        for terminal_field, terminal_value in terminal_mutations:
+            payload = deepcopy(terminal)
+            payload[terminal_field] = terminal_value
+            forged_terminals.append(canonical_json(cast(JsonValue, payload)))
+        payload = deepcopy(terminal)
+        del payload["resolved_concrete_id"]
+        forged_terminals.append(canonical_json(cast(JsonValue, payload)))
+
+        for forged_terminal in forged_terminals:
+            with pytest.raises(ValueError, match="contradicts the sealed"):
+                world.validate_artifact(replace(artifact, terminal_state=forged_terminal))
+
+        first, second = artifact.state_read_log
+        extra = StateRead(
+            sequence=2,
+            channel=world.template.selection_channel,
+            value_digest=first.value_digest,
+        )
+        forged_logs = (
+            (first,),
+            (*artifact.state_read_log, extra),
+            (
+                replace(second, sequence=0),
+                replace(first, sequence=1),
+            ),
+            (
+                replace(first, channel=world.template.resolver_channel),
+                second,
+            ),
+            (
+                replace(first, channel="undeclared_channel"),
+                second,
+            ),
+        )
+        for forged_log in forged_logs:
+            with pytest.raises(ValueError, match="contradicts the sealed"):
+                world.validate_artifact(replace(artifact, state_read_log=forged_log))
 
 
 def test_artifact_validator_rejects_undeclared_interventions(
