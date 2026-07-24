@@ -19,6 +19,9 @@ classifiers = [
   "Typing :: Typed",
 ]
 
+[project.scripts]
+witnessgap = "witnessgap.cli:main"
+
 [project.optional-dependencies]
 dev = [
   "mypy>=1.17,<2",
@@ -45,4 +48,3 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["A", "ARG", "B", "C4", "E", "F", "I", "N", "PERF", "PIE", "PL", "PYI", "RUF", "SIM", "UP"]
-
