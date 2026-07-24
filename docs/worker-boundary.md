@@ -38,8 +38,9 @@ passes a separate canonical limits copy to the backend. The record binds:
 The parent adds no PID, timestamp, duration, cwd, argv, exit code, stderr,
 partial stdout, absolute path, or exception text to the canonical record.
 Participant-controlled target and witness identifiers remain verbatim inside
-an otherwise valid claim, including when they are wrong; the later scorer must
-classify them rather than silently turn them into transport errors.
+an otherwise valid claim, including when they are wrong; the evaluator-side
+scorer classifies them against authenticated truth rather than silently
+turning them into transport errors.
 Infrastructure failures abort evaluation as `WorkerHarnessError`; they are not
 converted into participant abstentions.
 

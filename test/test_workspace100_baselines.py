@@ -23,6 +23,8 @@ from witnessgap.identifiability import (
     VerdictKind,
 )
 from witnessgap.model import Outcome
+from witnessgap.trust import VerificationTrustAnchor
+from witnessgap.verifier import trust_anchor_for_manifest
 from witnessgap.workspace100 import TEMPLATES
 from witnessgap.workspace100 import baselines as baseline_module
 from witnessgap.workspace100.baselines import (
@@ -46,6 +48,12 @@ from witnessgap.workspace100.claims import (
 )
 from witnessgap.workspace100.evidence import ParticipantClaim, PublicEvidenceEnvelope
 from witnessgap.workspace100.generation import generate_workspace100
+from witnessgap.workspace100.scoring import (
+    Workspace100ScoreBindings,
+    score_workspace100_claims,
+    workspace100_scoring_implementation_digest,
+)
+from witnessgap.workspace100.truth import build_workspace100_truth
 from witnessgap.workspace100.views import (
     ViewKind,
     Workspace100EvidenceViews,
@@ -81,6 +89,18 @@ _EXPECTED_ACTUAL_RUN_ROOT = (
 )
 _EXPECTED_ACTUAL_CLAIM_SET_ROOT = (
     "748a4089717276a22adfc76ca983d3510b80bfae2950ecf394e54578cd744030"
+)
+_EXPECTED_SCORING_IMPLEMENTATION_DIGEST = (
+    "5a7288a48308afc78b47650bc08b523734d813731fafecbd1bf5c10746dcc04e"
+)
+_EXPECTED_ACTUAL_ADJUDICATION_ROOT = (
+    "13e20da914f6bea2fbee2b95e94ec6ade5f5bbba0c0d2400f1aa83d278076522"
+)
+_EXPECTED_ACTUAL_AGGREGATE_ROOT = (
+    "b5ac9473fd2229dbd0d98a34f1b8e45753f6923774bb2a095a9c22a22ca90280"
+)
+_EXPECTED_ACTUAL_REPORT_ROOT = (
+    "17690c2f54303382b33cabd09413cb87c7a0431435a398db212aaa56db1cea1f"
 )
 _EXPECTED_BUNDLE_ROOTS = {
     BuiltinBaseline.ALWAYS_UNKNOWN: (
@@ -844,3 +864,85 @@ def test_actual_workspace100_matrix_matches_the_frozen_construction_expectations
     )
     assert claim_set.run_root == _EXPECTED_ACTUAL_RUN_ROOT
     assert claim_set.claim_set_root == _EXPECTED_ACTUAL_CLAIM_SET_ROOT
+
+    corpus = generate_workspace100(_SEED)
+    anchors: tuple[VerificationTrustAnchor, ...] = tuple(
+        trust_anchor_for_manifest(route.manifest)
+        for route in evidence_views._routes
+    )
+    truth = build_workspace100_truth(
+        corpus,
+        evidence_views,
+        trust_anchors=anchors,
+    )
+    scorer_digest = workspace100_scoring_implementation_digest()
+    report = score_workspace100_claims(
+        claim_set,
+        truth,
+        expected=Workspace100ScoreBindings(
+            claim_set_root=claim_set.claim_set_root,
+            truth_root=truth.truth_root,
+            baseline_set_root=claim_set.baseline_set_root,
+            assignment_root=claim_set.assignment_root,
+            evidence_root=claim_set.evidence_root,
+            projection_root=claim_set.projection_root,
+            method_registry_root=claim_set.method_registry_root,
+            scoring_implementation_digest=scorer_digest,
+        ),
+    )
+    expected_score_counts = {
+        BuiltinBaseline.ALWAYS_UNKNOWN: (0, 0, 100, 0, 200, 0, 0, 0, 0),
+        BuiltinBaseline.FORCED_ENVIRONMENT: (
+            0,
+            0,
+            0,
+            0,
+            0,
+            100,
+            0,
+            100,
+            100,
+        ),
+        BuiltinBaseline.REFRESH_SUCCESS_ONLY: (
+            0,
+            0,
+            100,
+            0,
+            150,
+            50,
+            0,
+            0,
+            0,
+        ),
+        BuiltinBaseline.REFRESH_OUTCOME: (
+            0,
+            0,
+            100,
+            0,
+            100,
+            100,
+            0,
+            0,
+            0,
+        ),
+    }
+    actual_score_counts = {
+        method.baseline: (
+            method.slices[0].counts.failed_ambiguous,
+            method.slices[0].counts.failed_identifiable,
+            method.slices[0].counts.correct_abstention,
+            method.slices[0].counts.wrong_reason_abstention,
+            method.slices[0].counts.missed_identifiable,
+            method.slices[0].counts.exact_decisive,
+            method.slices[0].counts.wrong_witness,
+            method.slices[0].counts.wrong_target,
+            method.slices[0].counts.decisive_on_ambiguous,
+        )
+        for method in report.methods
+    }
+
+    assert actual_score_counts == expected_score_counts
+    assert scorer_digest == _EXPECTED_SCORING_IMPLEMENTATION_DIGEST
+    assert report.adjudication_root == _EXPECTED_ACTUAL_ADJUDICATION_ROOT
+    assert report.aggregate_root == _EXPECTED_ACTUAL_AGGREGATE_ROOT
+    assert report.report_root == _EXPECTED_ACTUAL_REPORT_ROOT

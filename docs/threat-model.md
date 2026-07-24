@@ -15,6 +15,8 @@ For the current vertical slice, a verifier operator trusts:
   implementation digest;
 - the installed Workspace-100 claim evaluator/binder closure identified by its
   pinned implementation digest;
+- the installed Workspace-100 truth-joined scorer/report closure identified by
+  its pinned implementation digest;
 - the parent-selected worker backend, runtime identity, and exact limits;
 - an independently distributed trust-anchor record;
 - the procedure that keeps sealed sources and labels outside the participant
@@ -35,7 +37,8 @@ The verifier treats all of the following as untrusted:
 - source openings and commitment salts;
 - runner artifacts;
 - serialized certificate records;
-- serialized Workspace-100 ClaimSet records.
+- serialized Workspace-100 ClaimSet records; and
+- serialized Workspace-100 truth and score-report records.
 
 Boundary values must use exact built-in `bytes`, `str`, `tuple`, `list`, and
 `dict` types. Subclasses are rejected before hashing, equality checks, or
@@ -123,16 +126,26 @@ views, baseline set, backend digest, and limits; those expected values cannot
 come from the payload under review. Neither layer proves that the named backend
 actually executed the records.
 
+The scorer is evaluator-only and imports private truth. It canonical-copies
+ClaimSet and truth inputs, requires independently supplied ClaimSet, truth,
+baseline, method-registry, public-projection, and scorer roots, rejoins every
+record by evidence digest, and recomputes each worker request digest. Its
+structural report parser accepts only closed, additive, exactly rooted
+artifacts. Because an attacker can rewrite both content and hashes, the
+verified report loader also requires an independently expected report root,
+rebuilds every adjudication and table, and compares exact canonical bytes.
+Participant processes never import this module.
+
 Canonical parsing verifies hashes and bindings but is not a signature,
 transparency proof, or substitute for semantic replay. A party able to rewrite
 every record can also compute new self-consistent roots. Release consumers must
 obtain the expected corpus, baseline-set, assignment, evidence, projection,
-adapter, verifier, trust-anchor, truth, claim, evaluator/binder, backend,
-runtime, and limits roots through an independent authenticated channel. Fresh
-truth construction and worker replay can re-establish semantics and
-reproducibility, but cannot prove the historical origin of published runs.
-That requires an attestation, signature, or transparency mechanism outside the
-current implementation.
+adapter, verifier, trust-anchor, truth, claim, evaluator/binder, scorer,
+report, backend, runtime, and limits roots through an independent authenticated
+channel. Fresh truth construction and worker replay can re-establish semantics
+and reproducibility, but cannot prove the historical origin of published
+runs. That requires an attestation, signature, or transparency mechanism
+outside the current implementation.
 
 ## Explicit non-goals
 

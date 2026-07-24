@@ -6,11 +6,14 @@ Status: frozen protocol with an implemented authored catalog, in-memory
 sealed-source generator, trusted runtime adapter, closed participant wire, and
 verified evidence-view projection, evaluator truth certificates, and a
 fresh-process transport with four pinned trusted baseline bundles. A closed
-4×300 baseline execution evaluator and 1,200-run ClaimSet are also implemented.
-No materialized release directory, scorer/report builder, third-party-code
-isolation backend, or benchmark result exists yet. A change to size, evidence
-views, scoring grain, metric formulas, or semantic contracts requires a new
-protocol ID.
+4×300 baseline execution evaluator, 1,200-run ClaimSet, truth-joined exact
+scorer, and closed canonical report are also implemented. No materialized
+release directory, release manifest, third-party-code isolation backend, or
+public benchmark result exists yet. A change to size, evidence views, scoring
+grain, numeric metric formulas, or semantic contracts requires a new protocol
+ID. The pre-release clarification for two non-observable metric names is
+recorded in Section 8 and the
+[scoring contract](scoring-report.md).
 
 Workspace-100 is the Stage B engineering slice for WitnessGap. It tests two
 claims inside one synthetic, finite family:
@@ -251,7 +254,7 @@ protected leaderboard.
 
 ## 7. Deterministic baselines
 
-The future Stage B report must include:
+The implemented Stage B report includes:
 
 ### `always_unknown`
 
@@ -261,31 +264,29 @@ floor.
 ### `forced_environment`
 
 Always returns `identified_singleton(environment)` with the template's public
-refresh witness. The balanced twin construction is expected to give 50%
-target/witness exactness on identifiable cases and false certainty on every
-ambiguous case. These remain construction expectations until a verified
-ClaimSet is joined to pinned truth by the not-yet-implemented scorer/report
-builder.
+refresh witness. The measured frozen regression gives 50% target/witness
+exactness on identifiable cases and false certainty on every ambiguous case.
 
 ### `refresh_success_only`
 
 Returns `environment` only when the refresh receipt succeeds; otherwise
-returns `not_identifiable`. Its construction expectation is 50/100 decisive
-claims on `refresh_receipt`, or 50/300 overall.
+returns `not_identifiable`. The frozen report measures 50/100 decisive claims
+on `refresh_receipt`, or 50/300 overall.
 
 ### `refresh_outcome`
 
 Returns `environment` on refresh success and `policy` on refresh failure.
 The failure branch submits the mapped policy repair witness, not the observed
-refresh atom. Its construction expectation is 100/100 decisive claims on
+refresh atom. The frozen report measures 100/100 decisive claims on
 `refresh_receipt`, or 100/300 overall.
 
 All four implementations are pinned standalone source bundles. The policy
 repair atom is not present on the wire, so the narrow tool-to-witness mapping
 is explicitly declared public protocol knowledge in
-[the baseline bundle contract](baseline-bundles.md). The verifier-derived
-method must be reported separately from these baselines. No LLM judge or
-learned model is part of Workspace-100.
+[the baseline bundle contract](baseline-bundles.md). The report carries a
+truth-derived oracle ceiling separately; it has no participant method identity
+or ClaimSet runs and is not a fifth baseline. No LLM judge or learned model is
+part of Workspace-100.
 
 The vocabulary digest
 `62be02f2222129a1d72aaa5329d0f1e687f1014326e91cbbf7b5141973c651dd`
@@ -302,21 +303,24 @@ source bytes or either identity also requires a new protocol ID.
 The report must compute metrics per view and macro-average them by template:
 
 - decisive coverage;
-- false-certainty rate;
+- false-certainty risk and all-case incidence;
 - ambiguity false-certainty rate;
 - correct-abstention rate;
 - exact target-family match;
 - exact minimal-witness match;
-- intervention count;
-- verifier rejection count.
+- explicit availability records for the v1 `intervention_count` and
+  `verifier_rejection_count` names.
 
 A decisive answer is false-certain when:
 
 - the declared family is still ambiguous;
 - the target family is wrong;
-- the submitted witness is not minimal;
-- the claim is not bound to the trusted registry and evidence digests; or
-- independent verification rejects any source artifact or replay.
+- or the submitted witness is not the exact independently verified minimal
+  witness.
+
+A claim, request, certificate, registry, source, replay, or root that is not
+bound to the trusted inputs aborts the whole report. It is not converted into
+a method-level false-certainty event.
 
 Accuracy without decisive coverage and false-certainty rate is not reported as
 a primary metric.
@@ -324,9 +328,9 @@ a primary metric.
 The exact formulas are:
 
 - `decisive_coverage = decisive_claims / all_cases`;
-- `false_certainty_risk = rejected_or_wrong_decisive / decisive_claims`
+- `false_certainty_risk = false_certain_decisive / decisive_claims`
   (`NA` when there are no decisive claims);
-- `false_certainty_incidence = rejected_or_wrong_decisive / all_cases`;
+- `false_certainty_incidence = false_certain_decisive / all_cases`;
 - `ambiguity_false_certainty = decisive_on_ambiguous / ambiguous_cases`;
 - `correct_abstention = exact_ambiguous_worlds_abstentions / ambiguous_cases`;
 - `exact_target_family = valid_exact_family / identifiable_cases`;
@@ -335,6 +339,19 @@ The exact formulas are:
 Every table must publish raw numerators and denominators, micro rates, and the
 template macro. Source-generation failures must fail the release gate; they
 must not be reported as method-level verifier rejections.
+
+The v1 worker receives one fixed evidence record and cannot select or execute
+an intervention. `intervention_count` is therefore
+`not_applicable/not_observed_by_protocol`; counting input receipts would not
+measure a method. Independent-verifier and binding faults abort scoring, so
+`verifier_rejection_count` is
+`not_applicable/verification_faults_abort_report`. `invalid_claim` remains a
+separate worker-failure count. Numeric versions require a future protocol that
+actually observes those events. This clarification was made before any public
+Workspace-100 result and prevents unsupported zeros from entering the report.
+The exact category partition, rational representation, additive table
+contract, and measured baseline values are specified in
+[the scoring contract](scoring-report.md).
 
 ## 9. Evaluation isolation and artifacts
 
@@ -420,9 +437,11 @@ worker. They may be published after evaluation for reproducibility; this
 remains an open engineering slice, not a hidden leaderboard.
 
 All files use closed canonical schemas, deterministic ordering, no timestamps,
-and no absolute paths. Once the scorer/report builder exists, `report.json`
-must be derived from immutable, externally verified ClaimSet and truth records.
-Human-readable tables must be rendered from it rather than written by hand.
+and no absolute paths. The implemented report builder derives canonical report
+bytes from authenticated, canonical-copied ClaimSet and truth records.
+Human-readable tables must be rendered from those bytes rather than written by
+hand. Materializing them at `results/report.json` remains release-generator
+work.
 
 ## 10. Release gates
 
@@ -455,8 +474,8 @@ A public release is rejected unless all gates pass:
     sealed sources and labels;
 17. the release manifest pins protocol, public-vocabulary, baseline-set,
     source, registry, panel, assignment, evidence, projection, truth, claim,
-    report, adapter, verifier, worker, claim-evaluator/binder, backend, runtime,
-    exact limits, isolation-policy, and trust-anchor roots;
+    report, adapter, verifier, worker, claim-evaluator/binder, scorer, backend,
+    runtime, exact limits, isolation-policy, and trust-anchor roots;
 18. the claim-set method registry contains each of the four pinned
     `(method_id, program_implementation_digest)` pairs exactly once, every run
     references one registry identity, each identity has exactly 300 unique
@@ -464,9 +483,10 @@ A public release is rejected unless all gates pass:
     public projection; the report additionally binds the exact ClaimSet root,
     truth root, assignment/evidence/projection roots, and baseline-set root.
 
-The implemented ClaimSet establishes the execution half of gate 18. Gates 12,
-13, 16, and 17, plus the report-binding half of gate 18, remain open. Therefore
-no public Workspace-100 result exists yet.
+The implemented ClaimSet establishes the execution half of gate 18. The scorer
+enforces gate 13 and the report-binding half of gate 18 for the frozen
+in-memory regression. Gates 12, 16, and 17 remain open, so no materialized
+public Workspace-100 release exists yet.
 
 Expected view-level assertions:
 

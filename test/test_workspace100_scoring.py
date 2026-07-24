@@ -9,7 +9,7 @@ from typing import cast
 
 import pytest
 
-from witnessgap.canonical import JsonValue, canonical_json
+from witnessgap.canonical import JsonValue, canonical_digest, canonical_json
 from witnessgap.identifiability import UnknownReason, VerdictKind
 from witnessgap.model import Outcome, TargetFamily, Witness
 from witnessgap.trust import VerificationTrustAnchor
@@ -33,7 +33,7 @@ from witnessgap.workspace100.generation import (
     Workspace100Corpus,
     generate_workspace100,
 )
-from witnessgap.workspace100.records import TemplateId
+from witnessgap.workspace100.records import PROTOCOL_ID, TemplateId
 from witnessgap.workspace100.scoring import (
     Workspace100ExactRatio,
     Workspace100FailureCounts,
@@ -61,6 +61,7 @@ from witnessgap.workspace100.truth import (
 from witnessgap.workspace100.views import (
     ViewKind,
     Workspace100EvidenceViews,
+    Workspace100ProjectionRoots,
     build_workspace100_evidence_views,
 )
 from witnessgap.workspace100.worker import (
@@ -91,6 +92,9 @@ _RUN_COUNT = _METHOD_COUNT * _CASE_COUNT
 _SLICE_COUNT = 30
 _MACRO_COUNT = 5
 _DEFINED_MACRO_COMPONENTS = 2
+_EXPECTED_SCORING_IMPLEMENTATION_DIGEST = (
+    "5a7288a48308afc78b47650bc08b523734d813731fafecbd1bf5c10746dcc04e"
+)
 
 
 @pytest.fixture(scope="module")
@@ -596,8 +600,7 @@ def test_failure_counts_preserve_all_five_worker_outcomes() -> None:
 def test_scoring_source_closure_has_a_stable_digest_shape() -> None:
     digest = workspace100_scoring_implementation_digest()
 
-    assert len(digest) == _SHA256_HEX_LENGTH
-    assert set(digest) <= set("0123456789abcdef")
+    assert digest == _EXPECTED_SCORING_IMPLEMENTATION_DIGEST
 
 
 def test_scoring_fresh_import_is_covered_by_its_source_closure() -> None:
@@ -938,6 +941,77 @@ def test_expected_scorer_identity_is_checked_before_artifact_scoring(
             baseline_claim_set,
             truth_set,
             expected=wrong,
+        )
+
+
+@pytest.mark.parametrize(
+    "binding_field",
+    ("claim_set_root", "truth_root", "method_registry_root"),
+)
+def test_score_construction_rejects_substituted_pinned_roots(
+    baseline_claim_set: Workspace100ClaimSet,
+    truth_set: Workspace100TruthSet,
+    score_bindings: Workspace100ScoreBindings,
+    binding_field: str,
+) -> None:
+    wrong = replace(
+        score_bindings,
+        **{binding_field: "0" * _SHA256_HEX_LENGTH},
+    )
+
+    with pytest.raises(ValueError, match="score bindings"):
+        score_workspace100_claims(
+            baseline_claim_set,
+            truth_set,
+            expected=wrong,
+        )
+
+
+def test_score_construction_rejects_a_coherent_foreign_projection_binding(
+    baseline_claim_set: Workspace100ClaimSet,
+    truth_set: Workspace100TruthSet,
+    score_bindings: Workspace100ScoreBindings,
+) -> None:
+    projection_format = "witnessgap.workspace100-evidence-projection.v1"
+    assignment_root = "0" * _SHA256_HEX_LENGTH
+    evidence_root = "1" * _SHA256_HEX_LENGTH
+    projection_payload: dict[str, JsonValue] = {
+        "assignment_root": assignment_root,
+        "evidence_root": evidence_root,
+        "format": projection_format,
+        "protocol_id": PROTOCOL_ID,
+    }
+    foreign_roots = Workspace100ProjectionRoots(
+        assignment_root=assignment_root,
+        evidence_root=evidence_root,
+        projection_root=canonical_digest(
+            projection_format,
+            projection_payload,
+        ),
+    )
+    foreign_claim_set = replace(
+        baseline_claim_set,
+        assignment_root=foreign_roots.assignment_root,
+        evidence_root=foreign_roots.evidence_root,
+        projection_root=foreign_roots.projection_root,
+    )
+    foreign_expected = replace(
+        score_bindings,
+        claim_set_root=foreign_claim_set.claim_set_root,
+        assignment_root=foreign_roots.assignment_root,
+        evidence_root=foreign_roots.evidence_root,
+        projection_root=foreign_roots.projection_root,
+    )
+
+    assert foreign_claim_set.claim_set_root != baseline_claim_set.claim_set_root
+    with pytest.raises(
+        ValueError,
+        match="truth set contradicts expected score bindings",
+    ):
+        score_workspace100_claims(
+            foreign_claim_set,
+            truth_set,
+            expected=foreign_expected,
         )
 
 
