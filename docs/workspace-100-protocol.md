@@ -17,6 +17,13 @@ a new protocol ID. The pre-release clarification for two non-observable metric
 names is recorded in Section 8 and the
 [scoring contract](scoring-report.md).
 
+One honest-runtime development capture now exercises that implementation from
+generation through materialization, rooted loading, and semantic replay. Its
+closed [candidate receipt](evidence/workspace100-candidate-receipt.json) is
+reviewable evidence for one local run, not a public release or runtime
+attestation. The exact capture and check lifecycle is implemented by
+[`candidate_capture.py`](../src/witnessgap/workspace100/candidate_capture.py).
+
 Workspace-100 is the Stage B engineering slice for WitnessGap. It tests two
 claims inside one synthetic, finite family:
 
@@ -438,7 +445,8 @@ authoring package is neither installed nor mounted in the child.
 
 `sealed`, `verified`, and `truth` are never mounted into the participant
 worker. The development-candidate builder includes them so a trusted evaluator
-can replay every semantic binding. No such tree is currently authenticated and
+can replay every semantic binding. One such development tree has been captured
+and checked locally, but it is neither independently authenticated nor
 published as a public benchmark release.
 
 All files use closed canonical schemas, deterministic ordering, no timestamps,
@@ -491,10 +499,31 @@ A public release is rejected unless all gates pass:
 The implemented ClaimSet establishes the execution half of gate 18. The scorer
 enforces gate 13 and the report-binding half of gate 18. The release builder,
 manifest, loader, and semantic verifier implement the gate-17 record and replay
-machinery, but no consumer has an independently authenticated public release
-root. Gate 12 has not been established for two clean, honest runtime-bound
-candidate captures, and gate 16 remains open. Therefore no public
-Workspace-100 benchmark release exists yet.
+machinery.
+
+The repository records exactly one successful honest-runtime development
+capture in the
+[candidate receipt](evidence/workspace100-candidate-receipt.json). It used
+CPython 3.12.3 on Linux x86_64; the resolved interpreter binary had SHA-256
+`1643dacd9feaedc58f3cc581e4d22577dfe25c09b10282936186ccf0f2e61118`.
+All 1,200 frozen baseline runs produced claims and none produced a normalized
+worker failure. The materialized tree contains 13 payload files plus the
+manifest, totaling 5,610,036 exact file bytes. Its release root is
+`005987000c049e34f1a5b1f886bb07bcd1d02d983c16ddfd098cde6e79c82d01`;
+the separate receipt root is
+`668d2093bef503c0c43300f586427124863d59fc5b75d223d2396fb28da6f313`.
+The receipt intentionally lives outside both the release and artifact-tree
+roots. A separate semantic `check` supplied the release root externally,
+reloaded the materialized directory, replayed every release binding, and
+reproduced the same canonical receipt.
+
+This establishes one reproducible development observation only. It does not
+independently authenticate the expected root, and the local process backend is
+not a sandbox. Gate 12 remains open because only one clean runtime-bound
+capture exists and the actual frozen programs have not yet run under a second
+valid transient schedule. Gate 16 and authenticated public-root distribution
+also remain open. Therefore no public Workspace-100 benchmark release exists
+yet.
 
 Expected view-level assertions:
 
