@@ -8,6 +8,7 @@ from enum import StrEnum
 from typing import Protocol
 
 _IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_SHA256_HEX_LENGTH = 64
 
 
 def _require_identifier(value: str, *, field: str) -> None:
@@ -57,6 +58,50 @@ class ReplayResult:
             _require_identifier(channel, field="state channel")
         if tuple(sorted(set(self.state_reads))) != self.state_reads:
             raise ValueError("state_reads must be unique and sorted")
+
+
+@dataclass(frozen=True, slots=True)
+class StateRead:
+    """One ordered, runner-recorded read from declared world state."""
+
+    sequence: int
+    channel: str
+    value_digest: str
+
+    def __post_init__(self) -> None:
+        if self.sequence < 0:
+            raise ValueError("state-read sequence cannot be negative")
+        _require_identifier(self.channel, field="state channel")
+        if len(self.value_digest) != _SHA256_HEX_LENGTH or any(
+            character not in "0123456789abcdef" for character in self.value_digest
+        ):
+            raise ValueError("state-read value_digest must be lowercase SHA-256")
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionArtifact:
+    """Raw runner output evaluated later by a separate success oracle."""
+
+    public_trace: bytes
+    terminal_state: bytes
+    state_read_log: tuple[StateRead, ...]
+    intervention_log: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.public_trace, bytes) or not isinstance(self.terminal_state, bytes):
+            raise TypeError("execution trace and terminal state must be bytes")
+        sequences = tuple(read.sequence for read in self.state_read_log)
+        if sequences != tuple(range(len(self.state_read_log))):
+            raise ValueError("state-read sequence must be contiguous and start at zero")
+        if self.intervention_log != tuple(sorted(set(self.intervention_log))):
+            raise ValueError("intervention_log must be unique and sorted")
+
+
+class ExecutionRunner(Protocol):
+    """A fresh, single-snapshot runner used by the independent verifier."""
+
+    def run(self, interventions: frozenset[str]) -> ExecutionArtifact:
+        """Execute exactly one intervention subset."""
 
 
 class FiniteWorld(Protocol):

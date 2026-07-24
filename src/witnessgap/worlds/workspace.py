@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from enum import StrEnum
 
 from witnessgap.canonical import JsonValue, canonical_digest, canonical_json
-from witnessgap.model import InterventionAtom, Outcome, ReplayResult
+from witnessgap.model import (
+    ExecutionArtifact,
+    ExecutionRunner,
+    InterventionAtom,
+    Outcome,
+    ReplayResult,
+    StateRead,
+)
 
 
 class WorkspaceCause(StrEnum):
@@ -35,6 +43,89 @@ class _WorkspaceState:
         if self.selected_pointer == "approved":
             return self.approved_pointer
         return self.selected_pointer
+
+
+@dataclass(slots=True)
+class _WorkspaceRunner:
+    initial_state: _WorkspaceState
+    _used: bool = False
+
+    def run(self, interventions: frozenset[str]) -> ExecutionArtifact:
+        if self._used:
+            raise RuntimeError("workspace runner is single-use; request a fresh snapshot")
+        self._used = True
+
+        known = {atom.name for atom in _ATOMS}
+        if unknown := interventions - known:
+            raise ValueError(f"unknown interventions: {sorted(unknown)!r}")
+
+        state = self.initial_state
+        if "refresh_draft_store" in interventions:
+            state = _WorkspaceState(
+                approved_pointer=_APPROVED_REVISION,
+                selected_pointer=state.selected_pointer,
+            )
+        if "repair_draft_selection" in interventions:
+            state = _WorkspaceState(
+                approved_pointer=state.approved_pointer,
+                selected_pointer="approved",
+            )
+
+        reads = [
+            StateRead(
+                sequence=0,
+                channel="policy_selection",
+                value_digest=canonical_digest(
+                    "witnessgap.state-value.v1",
+                    {"value": state.selected_pointer},
+                ),
+            )
+        ]
+        if state.selected_pointer == "approved":
+            reads.append(
+                StateRead(
+                    sequence=1,
+                    channel="draft_store_epoch",
+                    value_digest=canonical_digest(
+                        "witnessgap.state-value.v1",
+                        {"value": state.approved_pointer},
+                    ),
+                )
+            )
+
+        document = state.selected_revision()
+        approved = document == _APPROVED_REVISION
+        trace = canonical_json(
+            {
+                "events": [
+                    {
+                        "arguments": {"workspace": "northstar"},
+                        "result": {"draft": document},
+                        "tool": "read_release_draft",
+                    },
+                    {
+                        "arguments": {"draft": document},
+                        "result": {"status": "published"},
+                        "tool": "publish_release_notes",
+                    },
+                ],
+                "interventions": sorted(interventions),
+                "task": "Publish the approved Northstar release notes.",
+                "terminal": "approved_content_present" if approved else "approved_content_missing",
+            }
+        )
+        terminal_state = canonical_json(
+            {
+                "approved_content_present": approved,
+                "published_document": document,
+            }
+        )
+        return ExecutionArtifact(
+            public_trace=trace,
+            terminal_state=terminal_state,
+            state_read_log=tuple(reads),
+            intervention_log=tuple(sorted(interventions)),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,48 +200,33 @@ class WorkspaceWorld:
             raise KeyError(name)
         return canonical_json({"name": name, "value": value})
 
+    def fresh_runner(self) -> ExecutionRunner:
+        return _WorkspaceRunner(self._initial_state())
+
+    def evaluate_terminal(self, terminal_state: bytes) -> Outcome:
+        try:
+            value: object = json.loads(terminal_state)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("terminal state is not valid UTF-8 JSON") from error
+        if not isinstance(value, dict) or canonical_json(value) != terminal_state:
+            raise ValueError("terminal state is not canonical JSON")
+        if set(value) != {"approved_content_present", "published_document"}:
+            raise ValueError("terminal state does not match the workspace oracle schema")
+        approved = value["approved_content_present"]
+        document = value["published_document"]
+        if not isinstance(approved, bool) or not isinstance(document, str):
+            raise ValueError("terminal state contains invalid workspace field types")
+        expected_approved = document == _APPROVED_REVISION
+        if approved is not expected_approved:
+            raise ValueError("terminal state approval flag contradicts the published document")
+        return Outcome.SUCCESS if approved else Outcome.FAILURE
+
     def replay(self, interventions: frozenset[str]) -> ReplayResult:
-        known = {atom.name for atom in _ATOMS}
-        if unknown := interventions - known:
-            raise ValueError(f"unknown interventions: {sorted(unknown)!r}")
-
-        state = self._initial_state()
-        if "refresh_draft_store" in interventions:
-            state = _WorkspaceState(
-                approved_pointer=_APPROVED_REVISION,
-                selected_pointer=state.selected_pointer,
-            )
-        if "repair_draft_selection" in interventions:
-            state = _WorkspaceState(
-                approved_pointer=state.approved_pointer,
-                selected_pointer="approved",
-            )
-
-        document = state.selected_revision()
-        approved = document == _APPROVED_REVISION
-        trace = canonical_json(
-            {
-                "events": [
-                    {
-                        "arguments": {"workspace": "northstar"},
-                        "result": {"draft": document},
-                        "tool": "read_release_draft",
-                    },
-                    {
-                        "arguments": {"draft": document},
-                        "result": {"status": "published"},
-                        "tool": "publish_release_notes",
-                    },
-                ],
-                "interventions": sorted(interventions),
-                "task": "Publish the approved Northstar release notes.",
-                "terminal": "approved_content_present" if approved else "approved_content_missing",
-            }
-        )
+        artifact = self.fresh_runner().run(interventions)
         return ReplayResult(
-            public_trace=trace,
-            outcome=Outcome.SUCCESS if approved else Outcome.FAILURE,
-            state_reads=_STATE_CHANNELS,
+            public_trace=artifact.public_trace,
+            outcome=self.evaluate_terminal(artifact.terminal_state),
+            state_reads=tuple(sorted({read.channel for read in artifact.state_read_log})),
         )
 
     def _initial_state(self) -> _WorkspaceState:
