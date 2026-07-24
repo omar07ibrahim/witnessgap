@@ -43,7 +43,7 @@ _DIGEST_A = "a" * 64
 _DIGEST_B = "b" * 64
 _SHA256_HEX_LENGTH = 64
 _EXPECTED_WORKER_IMPLEMENTATION_DIGEST = (
-    "2d69f0013fac37154789f89108f2bd4b097e7e67b963ad6a99d5c863778bc8cb"
+    "b924cc67ac79ec2efc2d97501aaa8f6634173c4e5f44f0234e1a9b46ff95dcb2"
 )
 _EXPECTED_STANDALONE_RUN_DIGEST = (
     "ace50175c3bdfb36a7a9af1000022e0d80b003d694a62a3c92422211e79aa635"
@@ -181,6 +181,16 @@ class _MutatingBackend(_CaptureBackend):
         return super().invoke(request, limits=limits)
 
 
+class _LimitsMutatingBackend(_CaptureBackend):
+    def invoke(self, request: bytes, *, limits: WorkerLimits) -> RawWorkerExit:
+        object.__setattr__(
+            limits,
+            "timeout_ms",
+            limits.timeout_ms + 1,
+        )
+        return super().invoke(request, limits=limits)
+
+
 def test_parent_passes_one_exact_envelope_without_routing_metadata() -> None:
     envelope = _envelope()
     backend = _CaptureBackend(_UNKNOWN_CLAIM)
@@ -226,6 +236,30 @@ def test_backend_mutation_cannot_rewrite_recorded_request_identity() -> None:
     assert record.evidence_digest == expected_evidence_digest
     assert record.request_digest == expected_request_digest
     assert backend.calls[0][0] != envelope.to_canonical_bytes()
+
+
+def test_backend_cannot_rewrite_the_parent_pinned_limits() -> None:
+    timeout_ms = 321
+    limits = WorkerLimits(
+        timeout_ms=timeout_ms,
+        stdout_bytes=1_024,
+        stderr_bytes=12,
+    )
+    expected_limits_digest = limits.digest
+    backend = _LimitsMutatingBackend(_UNKNOWN_CLAIM)
+
+    record = run_worker_once(
+        WorkerProgram("limits_mutating_backend", _DIGEST_A),
+        _envelope(),
+        backend=cast(WorkerBackend, backend),
+        limits=limits,
+    )
+
+    assert limits.timeout_ms == timeout_ms
+    assert limits.digest == expected_limits_digest
+    assert record.limits_digest == expected_limits_digest
+    assert backend.calls[0][1] is not limits
+    assert backend.calls[0][1].timeout_ms == timeout_ms + 1
 
 
 def test_parent_rechecks_backend_output_bounds() -> None:

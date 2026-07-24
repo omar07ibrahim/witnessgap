@@ -10,7 +10,7 @@ from typing import cast
 import pytest
 
 from witnessgap import workspace100
-from witnessgap.canonical import JsonValue, canonical_json
+from witnessgap.canonical import JsonValue, canonical_digest, canonical_json
 from witnessgap.identifiability import UnknownReason, VerdictKind
 from witnessgap.workspace100.baselines import (
     BUILTIN_BASELINE_SET_ROOT,
@@ -30,6 +30,7 @@ from witnessgap.workspace100.claims import (
 )
 from witnessgap.workspace100.evidence import ParticipantClaim
 from witnessgap.workspace100.generation import generate_workspace100
+from witnessgap.workspace100.records import PROTOCOL_ID
 from witnessgap.workspace100.views import (
     Workspace100EvidenceViews,
     build_workspace100_evidence_views,
@@ -62,7 +63,7 @@ _EXPECTED_CLAIM_SET_ROOT = (
     "1e1d58d1760255d5b29e4afc0fc0f9ae26494b4cc40f27869d70851e2ee017e5"
 )
 _EXPECTED_CLAIMS_IMPLEMENTATION_DIGEST = (
-    "3b25959f44734b9d9284a0130ca18180b12922b209329b419dbd70b401537f74"
+    "0665782f8dfdb3490ae1ed0abf846c9b6aa2f72304ccc3336fa4ed56fd95d6f4"
 )
 _UNKNOWN_CLAIM = ParticipantClaim(
     kind=VerdictKind.NOT_IDENTIFIABLE,
@@ -82,6 +83,8 @@ class _RecordingBackend:
         self._harness_error: WorkerHarnessErrorKind | None = None
         self._change_identity_after_invoke = False
         self._change_program_after_invoke = False
+        self._change_passed_limits = False
+        self._external_limits_to_mutate: WorkerLimits | None = None
         self._time_out_first_invoke = False
         self.requests: list[tuple[bytes, WorkerLimits]] = []
 
@@ -94,7 +97,24 @@ class _RecordingBackend:
         return self._backend_digest
 
     def invoke(self, request: bytes, *, limits: WorkerLimits) -> RawWorkerExit:
-        self.requests.append((request, limits))
+        received_limits = WorkerLimits.from_canonical_bytes(
+            limits.to_canonical_bytes()
+        )
+        self.requests.append((request, received_limits))
+        if self._change_passed_limits:
+            object.__setattr__(
+                limits,
+                "timeout_ms",
+                limits.timeout_ms + 1,
+            )
+        if self._external_limits_to_mutate is not None:
+            external_limits = self._external_limits_to_mutate
+            self._external_limits_to_mutate = None
+            object.__setattr__(
+                external_limits,
+                "timeout_ms",
+                external_limits.timeout_ms + 1,
+            )
         if self._harness_error is not None:
             raise WorkerHarnessError(self._harness_error)
         if self._time_out_first_invoke and len(self.requests) == 1:
@@ -251,6 +271,15 @@ def test_canonical_evaluation_matches_when_per_key_outcomes_match(
     order = _execution_order(evidence_views, baseline_set)
     forward_backends = _recording_backends(baseline_set)
     reverse_backends = _recording_backends(baseline_set)
+    reverse_limits = WorkerLimits.from_canonical_bytes(
+        limits.to_canonical_bytes()
+    )
+    for backend in reverse_backends:
+        assert isinstance(backend, _RecordingBackend)
+        backend._change_passed_limits = True
+    first_reverse_backend = reverse_backends[0]
+    assert isinstance(first_reverse_backend, _RecordingBackend)
+    first_reverse_backend._external_limits_to_mutate = reverse_limits
 
     forward = evaluate_workspace100_baselines(
         evidence_views,
@@ -261,12 +290,14 @@ def test_canonical_evaluation_matches_when_per_key_outcomes_match(
     reverse = evaluate_workspace100_baselines(
         evidence_views,
         baseline_set,
-        execution=_execution_plan(reverse_backends, limits),
+        execution=_execution_plan(reverse_backends, reverse_limits),
         execution_order=tuple(reversed(order)),
     )
 
     assert forward.to_canonical_bytes() == claim_set.to_canonical_bytes()
     assert reverse.to_canonical_bytes() == forward.to_canonical_bytes()
+    assert reverse_limits.timeout_ms == limits.timeout_ms + 1
+    assert reverse.limits == limits
     expected_requests = tuple(
         (case.envelope.to_canonical_bytes(), limits)
         for case in evidence_views.cases
@@ -842,11 +873,47 @@ def test_external_join_requires_caller_pinned_backend_and_limits(
         )
 
 
-def test_claim_set_rejects_a_coordinated_projection_root_rewrite(
+def test_claim_set_rejects_an_inconsistent_projection_root_rewrite(
     claim_set: Workspace100ClaimSet,
 ) -> None:
     with pytest.raises(ValueError, match="projection root contradicts"):
         replace(claim_set, projection_root="0" * 64)
+
+
+def test_verified_loader_rejects_a_coordinated_projection_substitution(
+    claim_set: Workspace100ClaimSet,
+    evidence_views: Workspace100EvidenceViews,
+    baseline_set: BuiltinBaselineSet,
+) -> None:
+    projection_format = "witnessgap.workspace100-evidence-projection.v1"
+    substituted_assignment_root = "0" * 64
+    substituted_projection_root = canonical_digest(
+        projection_format,
+        {
+            "assignment_root": substituted_assignment_root,
+            "evidence_root": claim_set.evidence_root,
+            "format": projection_format,
+            "protocol_id": PROTOCOL_ID,
+        },
+    )
+    substituted = Workspace100ClaimSet.from_canonical_bytes(
+        replace(
+            claim_set,
+            assignment_root=substituted_assignment_root,
+            projection_root=substituted_projection_root,
+        ).to_canonical_bytes()
+    )
+
+    assert substituted.assignment_root == substituted_assignment_root
+    assert substituted.claim_set_root != claim_set.claim_set_root
+    with pytest.raises(ValueError, match="public evidence projection"):
+        load_verified_workspace100_claim_set(
+            substituted.to_canonical_bytes(),
+            evidence_views,
+            baseline_set,
+            expected_backend_implementation_digest=_BACKEND_DIGEST,
+            expected_limits=claim_set.limits,
+        )
 
 
 def test_claim_set_revalidates_post_init_mutation(

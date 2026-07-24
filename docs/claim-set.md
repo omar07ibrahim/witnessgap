@@ -27,6 +27,12 @@ classify predictions or calculate metrics.
 - a transient permutation of all 1,200 `Workspace100RunKey` method/evidence
   pairs.
 
+The evaluator canonical-copies the pinned limits before execution.
+`run_worker_once` keeps pre-invocation limit thresholds and their digest in
+private scalar fields, then gives the backend a separate canonical copy. A
+backend mutation therefore cannot rewrite the rooted limits or output
+normalization policy.
+
 The complete permutation is checked for missing, duplicate, or foreign keys
 before the first backend invocation. Each backend program digest must match
 the corresponding frozen bundle. All four backend implementation digests must
@@ -119,7 +125,7 @@ assignment/evidence projection and frozen baseline set.
 The installed evaluator/binder source closure is separately identified by
 `workspace100_claims_implementation_digest()`. Its current regression-pinned
 digest is
-`3b25959f44734b9d9284a0130ca18180b12922b209329b419dbd70b401537f74`.
+`0665782f8dfdb3490ae1ed0abf846c9b6aa2f72304ccc3336fa4ed56fd95d6f4`.
 That digest is an integrity identity, not a signature or runtime attestation.
 
 ## Parsing and external verification

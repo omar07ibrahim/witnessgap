@@ -23,7 +23,9 @@ prevent offline evidence fingerprinting.
 
 `run_worker_once` validates and reserializes one exact
 `PublicEvidenceEnvelope`, calls one backend once, and stores a closed
-`WorkerRunRecord`. The record binds:
+`WorkerRunRecord`. It snapshots the caller-pinned limits before invocation,
+retains only their pre-call digest and output thresholds for normalization, and
+passes a separate canonical limits copy to the backend. The record binds:
 
 - the parent-configured method ID and participant implementation digest;
 - the worker-backend implementation digest, which for the local backend binds

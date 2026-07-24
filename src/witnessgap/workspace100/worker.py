@@ -572,7 +572,9 @@ class WorkerRunRecord:
 class _RunContext:
     program: WorkerProgram
     backend_digest: str
-    limits: WorkerLimits
+    limits_digest: str
+    stdout_limit_bytes: int
+    stderr_limit_bytes: int
     envelope: PublicEvidenceEnvelope
     request_digest: str
 
@@ -596,6 +598,12 @@ def run_worker_once(
     elif type(limits) is not WorkerLimits:
         raise TypeError("worker limits must be exact")
     limits.validate()
+    limits_snapshot = WorkerLimits.from_canonical_bytes(
+        limits.to_canonical_bytes()
+    )
+    backend_limits = WorkerLimits.from_canonical_bytes(
+        limits_snapshot.to_canonical_bytes()
+    )
 
     request = envelope.to_canonical_bytes()
     normalized = PublicEvidenceEnvelope.from_canonical_bytes(request)
@@ -615,11 +623,13 @@ def run_worker_once(
     context = _RunContext(
         program=program,
         backend_digest=backend_digest,
-        limits=limits,
+        limits_digest=limits_snapshot.digest,
+        stdout_limit_bytes=limits_snapshot.stdout_bytes,
+        stderr_limit_bytes=limits_snapshot.stderr_bytes,
         envelope=normalized,
         request_digest=workspace100_worker_request_digest(normalized),
     )
-    raw = backend.invoke(request, limits=limits)
+    raw = backend.invoke(request, limits=backend_limits)
     if type(raw) is not RawWorkerExit:
         raise TypeError("worker backend must return an exact RawWorkerExit")
     return _normalize_worker_exit(raw, context=context)
@@ -640,8 +650,8 @@ def _normalize_worker_exit(
     context: _RunContext,
 ) -> WorkerRunRecord:
     if (
-        len(raw.stdout) > context.limits.stdout_bytes
-        or len(raw.stderr) > context.limits.stderr_bytes
+        len(raw.stdout) > context.stdout_limit_bytes
+        or len(raw.stderr) > context.stderr_limit_bytes
     ):
         failure = WorkerFailureKind.OUTPUT_LIMIT_EXCEEDED
     elif raw.kind is WorkerExitKind.TIMED_OUT:
@@ -664,7 +674,7 @@ def _normalize_worker_exit(
         method_id=context.program.method_id,
         implementation_digest=context.program.implementation_digest,
         backend_implementation_digest=context.backend_digest,
-        limits_digest=context.limits.digest,
+        limits_digest=context.limits_digest,
         evidence_digest=context.envelope.evidence_digest,
         request_digest=context.request_digest,
         status=WorkerRunStatus.CLAIMED,
@@ -680,7 +690,7 @@ def _failed_run_record(
         method_id=context.program.method_id,
         implementation_digest=context.program.implementation_digest,
         backend_implementation_digest=context.backend_digest,
-        limits_digest=context.limits.digest,
+        limits_digest=context.limits_digest,
         evidence_digest=context.envelope.evidence_digest,
         request_digest=context.request_digest,
         status=WorkerRunStatus.FAILED,

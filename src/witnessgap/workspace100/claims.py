@@ -515,13 +515,16 @@ def evaluate_workspace100_baselines(
     if type(execution) is not Workspace100ExecutionPlan:
         raise TypeError("baseline evaluation requires an exact execution plan")
     execution.validate()
+    limits_snapshot = WorkerLimits.from_canonical_bytes(
+        execution.limits.to_canonical_bytes()
+    )
     expected_execution = _ExpectedExecution(
         backend_implementation_digest=(
             execution.expected_backend_implementation_digest
         ),
-        limits=execution.limits,
+        limits=limits_snapshot,
     )
-    _validate_claim_inputs(views, baseline_set, execution.limits)
+    _validate_claim_inputs(views, baseline_set, limits_snapshot)
     normalized_order = _validate_execution_order(
         execution_order,
         views,
@@ -556,7 +559,7 @@ def evaluate_workspace100_baselines(
             artifact.bundle.worker_program,
             case.envelope,
             backend=backend,
-            limits=execution.limits,
+            limits=limits_snapshot,
         )
         _recheck_backend_identity(
             backend,
@@ -578,7 +581,7 @@ def evaluate_workspace100_baselines(
         baseline_set,
         tuple(records),
         backend_implementation_digest=backend_digest,
-        limits=execution.limits,
+        limits=limits_snapshot,
     )
 
 
