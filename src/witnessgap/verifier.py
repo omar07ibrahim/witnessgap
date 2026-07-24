@@ -43,6 +43,7 @@ _SHA256_HEX_LENGTH = 64
 _IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _PAIR_SIZE = 2
 _MIN_ALTERNATIVES = 2
+_MAX_EVIDENCE_BATCH = 4096
 _VERIFIER_IMPLEMENTATION_PATHS = (
     "__init__.py",
     "adapters.py",
@@ -249,7 +250,7 @@ class _CertificateFields:
     ambiguity_commitments: tuple[str, str] | None
 
 
-def verify_registry_attribution(  # noqa: PLR0912
+def verify_registry_attribution(
     sources: tuple[SealedWorldSource, ...],
     *,
     manifest: RegistryManifest,
@@ -258,20 +259,42 @@ def verify_registry_attribution(  # noqa: PLR0912
 ) -> VerifiedAttribution:
     """Rebuild the committed family from source openings and derive a verdict."""
 
+    return verify_registry_attributions(
+        sources,
+        manifest=manifest,
+        trust_anchor=trust_anchor,
+        evidences=(evidence,),
+    )[0]
+
+
+def verify_registry_attributions(
+    sources: tuple[SealedWorldSource, ...],
+    *,
+    manifest: RegistryManifest,
+    trust_anchor: VerificationTrustAnchor,
+    evidences: tuple[Evidence, ...],
+) -> tuple[VerifiedAttribution, ...]:
+    """Verify one source family once and derive ordered per-evidence certificates.
+
+    Panels and requested probes are invocation-local verifier outputs. They are
+    never accepted from a caller or retained across invocations.
+    """
+
     sources = _normalize_source_openings(sources)
     trust_anchor = _normalize_trust_anchor(trust_anchor)
     manifest = _normalize_manifest(manifest)
-    evidence = _normalize_evidence(evidence)
+    evidences = _normalize_evidence_batch(evidences)
     if manifest.digest != trust_anchor.registry_digest:
         raise VerificationError("registry manifest does not match the trust anchor")
     if manifest.adapter_implementation_digest != trust_anchor.adapter_implementation_digest:
         raise VerificationError("registry adapter does not match the trust anchor")
-    if (
-        evidence.registry_digest != trust_anchor.registry_digest
-        or evidence.coverage_manifest_digest != manifest.coverage_digest
-    ):
-        raise VerificationError("evidence is not bound to the trusted registry")
-    _preflight_evidence(evidence, manifest)
+    for evidence in evidences:
+        if (
+            evidence.registry_digest != trust_anchor.registry_digest
+            or evidence.coverage_manifest_digest != manifest.coverage_digest
+        ):
+            raise VerificationError("evidence is not bound to the trusted registry")
+        _preflight_evidence(evidence, manifest)
 
     try:
         adapter = resolve_trusted_adapter(
@@ -290,14 +313,51 @@ def verify_registry_attribution(  # noqa: PLR0912
     if commitments != manifest.candidate_commitments:
         raise VerificationError("source openings do not exhaust the committed completion family")
 
-    panels: list[VerifiedPanel] = []
-    compatible_indexes: list[int] = []
-    for index, source in enumerate(ordered_sources):
-        panel = _verify_source_panel(source, adapter=adapter, manifest=manifest)
-        panels.append(panel)
-        if _matches_evidence(source, adapter, panel, evidence, manifest):
-            compatible_indexes.append(index)
+    panels = tuple(
+        _verify_source_panel(source, adapter=adapter, manifest=manifest)
+        for source in ordered_sources
+    )
+    requested_probe_names = tuple(
+        sorted({observation.name for evidence in evidences for observation in evidence.probes})
+    )
+    probe_values = _verify_batch_probes(
+        ordered_sources,
+        adapter=adapter,
+        manifest=manifest,
+        names=requested_probe_names,
+    )
+    certificates: list[VerifiedAttribution] = []
+    for evidence in evidences:
+        compatible_indexes = tuple(
+            index
+            for index, panel in enumerate(panels)
+            if _matches_verified_evidence(
+                panel,
+                evidence,
+                probe_values=probe_values,
+                source_index=index,
+            )
+        )
+        certificates.append(
+            _derive_verified_attribution(
+                panels,
+                compatible_indexes=compatible_indexes,
+                evidence=evidence,
+                manifest=manifest,
+                trust_anchor=trust_anchor,
+            )
+        )
+    return tuple(certificates)
 
+
+def _derive_verified_attribution(
+    panels: tuple[VerifiedPanel, ...],
+    *,
+    compatible_indexes: tuple[int, ...],
+    evidence: Evidence,
+    manifest: RegistryManifest,
+    trust_anchor: VerificationTrustAnchor,
+) -> VerifiedAttribution:
     if not compatible_indexes:
         raise VerificationError("no committed completion reproduces the supplied evidence")
 
@@ -619,12 +679,32 @@ def _verify_declaration(
         raise VerificationError("trusted adapter identity differs from the manifest")
 
 
-def _matches_evidence(
-    source: SealedWorldSource,
+def _verify_batch_probes(
+    sources: tuple[SealedWorldSource, ...],
+    *,
     adapter: WorldSourceAdapter,
+    manifest: RegistryManifest,
+    names: tuple[str, ...],
+) -> dict[tuple[int, str], bytes]:
+    values: dict[tuple[int, str], bytes] = {}
+    for source_index, source in enumerate(sources):
+        for name in names:
+            first = _probe_fresh(source, adapter, manifest, name)
+            second = _probe_fresh(source, adapter, manifest, name)
+            if first != second:
+                raise VerificationError(
+                    f"{source.completion_commitment}: probe diverged across fresh source decodes"
+                )
+            values[(source_index, name)] = first
+    return values
+
+
+def _matches_verified_evidence(
     panel: VerifiedPanel,
     evidence: Evidence,
-    manifest: RegistryManifest,
+    *,
+    probe_values: dict[tuple[int, str], bytes],
+    source_index: int,
 ) -> bool:
     baseline = panel.receipt_for(())
     if (baseline.artifact.public_trace, baseline.outcome) != (
@@ -633,13 +713,7 @@ def _matches_evidence(
     ):
         return False
     for probe_observation in evidence.probes:
-        first = _probe_fresh(source, adapter, manifest, probe_observation.name)
-        second = _probe_fresh(source, adapter, manifest, probe_observation.name)
-        if first != second:
-            raise VerificationError(
-                f"{source.completion_commitment}: probe diverged across fresh source decodes"
-            )
-        if first != probe_observation.value:
+        if probe_values[(source_index, probe_observation.name)] != probe_observation.value:
             return False
     for intervention_observation in evidence.intervention_observations:
         try:
@@ -750,6 +824,16 @@ def _normalize_evidence(evidence: object) -> Evidence:
             for observation in evidence.intervention_observations
         ),
     )
+
+
+def _normalize_evidence_batch(evidences: object) -> tuple[Evidence, ...]:
+    if type(evidences) is not tuple:
+        raise VerificationError("evidence batch must be supplied as an exact tuple")
+    if not evidences or len(evidences) > _MAX_EVIDENCE_BATCH:
+        raise VerificationError(f"evidence batch must contain 1..{_MAX_EVIDENCE_BATCH} records")
+    if any(type(evidence) is not Evidence for evidence in evidences):
+        raise VerificationError("every batch record must be an exact Evidence value")
+    return tuple(_normalize_evidence(evidence) for evidence in evidences)
 
 
 def _normalize_source_opening(source: object) -> SealedWorldSource:
