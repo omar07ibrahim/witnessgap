@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+import json
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol
+from typing import Protocol, cast
 
-from witnessgap.canonical import JsonValue, canonical_digest
+from witnessgap.canonical import JsonValue, canonical_digest, canonical_json
 from witnessgap.model import FiniteWorld, InterventionAtom, Outcome, TargetFamily, Witness
 from witnessgap.oracle import RepairPanel, enumerate_repair_panel
 
 _REGISTRY_FORMAT = "witnessgap.registry.v2"
 _SHA256_HEX_LENGTH = 64
+_MAX_REGISTRY_ATOMS = 12
+_IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_FORMAT_ID = re.compile(r"^[a-z][a-z0-9_.-]{0,127}$")
 
 
 class ProbeWorld(FiniteWorld, Protocol):
@@ -83,6 +88,11 @@ class ProbeObservation:
     name: str
     value: bytes
 
+    def __post_init__(self) -> None:
+        _require_identifier(self.name, field="probe name")
+        if not isinstance(self.value, bytes):
+            raise TypeError("probe value must be bytes")
+
 
 @dataclass(frozen=True, order=True, slots=True)
 class InterventionObservation:
@@ -91,6 +101,13 @@ class InterventionObservation:
     interventions: Witness
     public_trace: bytes
     outcome: Outcome
+
+    def __post_init__(self) -> None:
+        _validate_intervention_set(self.interventions)
+        if not isinstance(self.public_trace, bytes):
+            raise TypeError("intervention public_trace must be bytes")
+        if not isinstance(self.outcome, Outcome):
+            raise TypeError("intervention outcome must be an Outcome")
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,18 +122,59 @@ class Evidence:
     intervention_observations: tuple[InterventionObservation, ...] = ()
 
     def __post_init__(self) -> None:
-        if not _is_sha256(self.registry_digest):
-            raise ValueError("registry_digest must be a lowercase SHA-256 digest")
-        if not _is_sha256(self.coverage_manifest_digest):
-            raise ValueError("coverage_manifest_digest must be a lowercase SHA-256 digest")
-        probe_names = tuple(item.name for item in self.probes)
-        if tuple(sorted(set(probe_names))) != probe_names:
-            raise ValueError("probe observations must be unique and sorted by name")
-        intervention_sets = tuple(item.interventions for item in self.intervention_observations)
-        if any(not item or item != tuple(sorted(set(item))) for item in intervention_sets):
-            raise ValueError("intervention queries must be non-empty sorted sets")
-        if tuple(sorted(set(intervention_sets))) != intervention_sets:
-            raise ValueError("intervention observations must be unique and sorted")
+        self.validate()
+
+    def validate(self) -> None:
+        """Validate nested evidence again at an untrusted API boundary."""
+
+        _validate_evidence_header(self)
+        _validate_probe_observations(self.probes)
+        _validate_intervention_observations(self.intervention_observations)
+
+
+def _validate_evidence_header(evidence: Evidence) -> None:
+    if not _is_sha256(evidence.registry_digest):
+        raise ValueError("registry_digest must be a lowercase SHA-256 digest")
+    if not _is_sha256(evidence.coverage_manifest_digest):
+        raise ValueError("coverage_manifest_digest must be a lowercase SHA-256 digest")
+    if not isinstance(evidence.public_trace, bytes):
+        raise TypeError("evidence public_trace must be bytes")
+    if not isinstance(evidence.outcome, Outcome):
+        raise TypeError("evidence outcome must be an Outcome")
+
+
+def _validate_probe_observations(probes: object) -> None:
+    if not isinstance(probes, tuple) or any(
+        type(observation) is not ProbeObservation for observation in probes
+    ):
+        raise TypeError("probes must be a tuple of exact ProbeObservation values")
+    typed_probes = cast(tuple[ProbeObservation, ...], probes)
+    for observation in typed_probes:
+        _require_identifier(observation.name, field="probe name")
+        if not isinstance(observation.value, bytes):
+            raise TypeError("probe value must be bytes")
+    probe_names = tuple(observation.name for observation in typed_probes)
+    if tuple(sorted(set(probe_names))) != probe_names:
+        raise ValueError("probe observations must be unique and sorted by name")
+
+
+def _validate_intervention_observations(observations: object) -> None:
+    if not isinstance(observations, tuple) or any(
+        type(observation) is not InterventionObservation for observation in observations
+    ):
+        raise TypeError(
+            "intervention_observations must contain exact InterventionObservation values"
+        )
+    typed_observations = cast(tuple[InterventionObservation, ...], observations)
+    for observation in typed_observations:
+        _validate_intervention_set(observation.interventions)
+        if not isinstance(observation.public_trace, bytes):
+            raise TypeError("intervention public_trace must be bytes")
+        if not isinstance(observation.outcome, Outcome):
+            raise TypeError("intervention outcome must be an Outcome")
+    intervention_sets = tuple(observation.interventions for observation in typed_observations)
+    if tuple(sorted(set(intervention_sets))) != intervention_sets:
+        raise ValueError("intervention observations must be unique and sorted")
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,24 +256,108 @@ class RegistryManifest:
     declared_state_channels: tuple[str, ...]
     candidate_commitments: tuple[str, ...]
 
-    @property
-    def coverage_digest(self) -> str:
-        payload: dict[str, JsonValue] = {
-            "declared_state_channels": self.declared_state_channels,
-            "format": "witnessgap.coverage-manifest.v1",
-            "task_schema_id": self.task_schema_id,
-        }
-        return canonical_digest("witnessgap.coverage-manifest.v1", payload)
+    def __post_init__(self) -> None:
+        self.validate()
+
+    def validate(self) -> None:
+        """Validate the complete public manifest at every trust boundary."""
+
+        _require_identifier(
+            self.task_schema_id,
+            field="task_schema_id",
+            error_type=RegistryError,
+        )
+        _require_identifier(
+            self.task_id,
+            field="task_id",
+            error_type=RegistryError,
+        )
+        _require_format_id(
+            self.source_format_id,
+            field="source_format_id",
+            error_type=RegistryError,
+        )
+        _require_identifier(
+            self.adapter_id,
+            field="adapter_id",
+            error_type=RegistryError,
+        )
+        if not isinstance(self.atoms, tuple) or any(
+            type(atom) is not InterventionAtom for atom in self.atoms
+        ):
+            raise RegistryError("atoms must contain exact InterventionAtom values")
+        if not self.atoms:
+            raise RegistryError("registry intervention algebra cannot be empty")
+        if len(self.atoms) > _MAX_REGISTRY_ATOMS:
+            raise RegistryError(
+                f"registry intervention algebra cannot exceed {_MAX_REGISTRY_ATOMS} atoms"
+            )
+        for atom in self.atoms:
+            _require_identifier(
+                atom.name,
+                field="atom name",
+                error_type=RegistryError,
+            )
+            _require_identifier(
+                atom.target,
+                field="atom target",
+                error_type=RegistryError,
+            )
+        if tuple(sorted(self.atoms, key=lambda atom: (atom.name, atom.target))) != self.atoms:
+            raise RegistryError("registry atoms must be sorted")
+        atom_names = tuple(atom.name for atom in self.atoms)
+        if len(set(atom_names)) != len(atom_names):
+            raise RegistryError("registry atom names must be unique")
+        _validate_identifier_tuple(self.probe_names, field="probe_names")
+        _validate_identifier_tuple(
+            self.declared_state_channels,
+            field="declared_state_channels",
+        )
+        digests = (
+            self.adapter_implementation_digest,
+            self.intervention_contract_digest,
+            self.probe_contract_digest,
+            self.runner_contract_digest,
+            self.artifact_validator_contract_digest,
+            self.success_oracle_contract_digest,
+            self.state_access_contract_digest,
+        )
+        if not all(_is_sha256(digest) for digest in digests):
+            raise RegistryError("manifest contract fields must be lowercase SHA-256 digests")
+        if (
+            not isinstance(self.candidate_commitments, tuple)
+            or not self.candidate_commitments
+            or any(not isinstance(commitment, str) for commitment in self.candidate_commitments)
+            or tuple(sorted(set(self.candidate_commitments))) != self.candidate_commitments
+            or not all(_is_sha256(digest) for digest in self.candidate_commitments)
+        ):
+            raise RegistryError(
+                "candidate_commitments must be non-empty, unique, sorted SHA-256 digests"
+            )
 
     @property
-    def digest(self) -> str:
+    def coverage_digest(self) -> str:
+        self.validate()
         payload: dict[str, JsonValue] = {
+            "declared_state_channels": self.declared_state_channels,
+            "format": "witnessgap.coverage-manifest.v2",
+            "state_access_contract_digest": self.state_access_contract_digest,
+            "task_schema_id": self.task_schema_id,
+        }
+        return canonical_digest("witnessgap.coverage-manifest.v2", payload)
+
+    def to_payload(self) -> dict[str, JsonValue]:
+        """Return the one closed JSON representation covered by the digest."""
+
+        self.validate()
+        return {
             "adapter_id": self.adapter_id,
             "adapter_implementation_digest": self.adapter_implementation_digest,
             "atoms": tuple({"name": atom.name, "target": atom.target} for atom in self.atoms),
             "artifact_validator_contract_digest": self.artifact_validator_contract_digest,
             "candidate_commitments": self.candidate_commitments,
             "coverage_manifest_digest": self.coverage_digest,
+            "declared_state_channels": self.declared_state_channels,
             "format": _REGISTRY_FORMAT,
             "intervention_contract_digest": self.intervention_contract_digest,
             "probe_names": self.probe_names,
@@ -227,7 +369,99 @@ class RegistryManifest:
             "task_id": self.task_id,
             "task_schema_id": self.task_schema_id,
         }
-        return canonical_digest(_REGISTRY_FORMAT, payload)
+
+    def to_canonical_bytes(self) -> bytes:
+        """Serialize the closed manifest for storage or independent review."""
+
+        return canonical_json(self.to_payload())
+
+    @classmethod
+    def from_canonical_bytes(cls, payload: bytes) -> RegistryManifest:
+        """Parse a canonical manifest while rejecting open or ambiguous schemas."""
+
+        raw = _canonical_object(payload, label="registry manifest")
+        expected_fields = {
+            "adapter_id",
+            "adapter_implementation_digest",
+            "atoms",
+            "artifact_validator_contract_digest",
+            "candidate_commitments",
+            "coverage_manifest_digest",
+            "declared_state_channels",
+            "format",
+            "intervention_contract_digest",
+            "probe_names",
+            "probe_contract_digest",
+            "runner_contract_digest",
+            "source_format_id",
+            "state_access_contract_digest",
+            "success_oracle_contract_digest",
+            "task_id",
+            "task_schema_id",
+        }
+        if set(raw) != expected_fields:
+            raise RegistryError("registry manifest contains unknown or missing fields")
+        if raw["format"] != _REGISTRY_FORMAT:
+            raise RegistryError("registry manifest format is unsupported")
+        atoms_raw = raw["atoms"]
+        if not isinstance(atoms_raw, list):
+            raise RegistryError("registry atoms must be a JSON array")
+        atoms: list[InterventionAtom] = []
+        for raw_atom in atoms_raw:
+            if not isinstance(raw_atom, dict) or set(raw_atom) != {"name", "target"}:
+                raise RegistryError("registry atom contains unknown or missing fields")
+            name = raw_atom["name"]
+            target = raw_atom["target"]
+            if not isinstance(name, str) or not isinstance(target, str):
+                raise RegistryError("registry atom fields must be strings")
+            atoms.append(InterventionAtom(name=name, target=target))
+        manifest = cls(
+            task_schema_id=_required_string(raw, "task_schema_id"),
+            task_id=_required_string(raw, "task_id"),
+            source_format_id=_required_string(raw, "source_format_id"),
+            adapter_id=_required_string(raw, "adapter_id"),
+            adapter_implementation_digest=_required_string(
+                raw,
+                "adapter_implementation_digest",
+            ),
+            atoms=tuple(atoms),
+            intervention_contract_digest=_required_string(
+                raw,
+                "intervention_contract_digest",
+            ),
+            probe_names=_required_string_tuple(raw, "probe_names"),
+            probe_contract_digest=_required_string(raw, "probe_contract_digest"),
+            runner_contract_digest=_required_string(raw, "runner_contract_digest"),
+            artifact_validator_contract_digest=_required_string(
+                raw,
+                "artifact_validator_contract_digest",
+            ),
+            success_oracle_contract_digest=_required_string(
+                raw,
+                "success_oracle_contract_digest",
+            ),
+            state_access_contract_digest=_required_string(
+                raw,
+                "state_access_contract_digest",
+            ),
+            declared_state_channels=_required_string_tuple(
+                raw,
+                "declared_state_channels",
+            ),
+            candidate_commitments=_required_string_tuple(
+                raw,
+                "candidate_commitments",
+            ),
+        )
+        if _required_string(raw, "coverage_manifest_digest") != manifest.coverage_digest:
+            raise RegistryError("coverage manifest digest contradicts its inline declaration")
+        if manifest.to_canonical_bytes() != payload:
+            raise RegistryError("registry manifest failed canonical round-trip")
+        return manifest
+
+    @property
+    def digest(self) -> str:
+        return canonical_digest(_REGISTRY_FORMAT, self.to_payload())
 
 
 @dataclass(frozen=True, slots=True)
@@ -498,7 +732,82 @@ def _validated_panel(world: ProbeWorld) -> RepairPanel:
     return panel
 
 
-def _is_sha256(value: str) -> bool:
-    return len(value) == _SHA256_HEX_LENGTH and all(
-        character in "0123456789abcdef" for character in value
+def _validate_intervention_set(interventions: object) -> None:
+    if (
+        not isinstance(interventions, tuple)
+        or not interventions
+        or any(not isinstance(name, str) for name in interventions)
+        or tuple(sorted(set(interventions))) != interventions
+    ):
+        raise ValueError("interventions must be a non-empty sorted tuple of unique names")
+    for name in interventions:
+        _require_identifier(name, field="intervention name")
+
+
+def _validate_identifier_tuple(values: object, *, field: str) -> None:
+    if (
+        not isinstance(values, tuple)
+        or any(not isinstance(value, str) for value in values)
+        or tuple(sorted(set(values))) != values
+    ):
+        raise RegistryError(f"{field} must be a unique sorted tuple of identifiers")
+    for value in values:
+        _require_identifier(value, field=field, error_type=RegistryError)
+
+
+def _require_identifier(
+    value: object,
+    *,
+    field: str,
+    error_type: type[ValueError] = ValueError,
+) -> None:
+    if not isinstance(value, str) or not _IDENTIFIER.fullmatch(value):
+        raise error_type(f"{field} must match {_IDENTIFIER.pattern!r}: {value!r}")
+
+
+def _require_format_id(
+    value: object,
+    *,
+    field: str,
+    error_type: type[ValueError] = ValueError,
+) -> None:
+    if not isinstance(value, str) or not _FORMAT_ID.fullmatch(value):
+        raise error_type(f"{field} must match {_FORMAT_ID.pattern!r}: {value!r}")
+
+
+def _canonical_object(payload: bytes, *, label: str) -> dict[str, object]:
+    if not isinstance(payload, bytes):
+        raise RegistryError(f"{label} must be bytes")
+    try:
+        value: object = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RegistryError(f"{label} is not valid UTF-8 JSON") from error
+    try:
+        is_canonical = isinstance(value, dict) and canonical_json(cast(JsonValue, value)) == payload
+    except TypeError as error:
+        raise RegistryError(f"{label} contains unsupported JSON values") from error
+    if not is_canonical:
+        raise RegistryError(f"{label} is not canonical JSON")
+    return cast(dict[str, object], value)
+
+
+def _required_string(raw: dict[str, object], field: str) -> str:
+    value = raw[field]
+    if not isinstance(value, str):
+        raise RegistryError(f"registry field {field!r} must be a string")
+    return value
+
+
+def _required_string_tuple(raw: dict[str, object], field: str) -> tuple[str, ...]:
+    value = raw[field]
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise RegistryError(f"registry field {field!r} must be an array of strings")
+    return tuple(cast(list[str], value))
+
+
+def _is_sha256(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == _SHA256_HEX_LENGTH
+        and all(character in "0123456789abcdef" for character in value)
     )

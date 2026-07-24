@@ -13,6 +13,7 @@ from witnessgap.adapters import TrustedAdapterError, resolve_trusted_adapter
 from witnessgap.canonical import JsonValue, canonical_digest, tagged_digest
 from witnessgap.identifiability import (
     Evidence,
+    RegistryError,
     RegistryManifest,
     UnknownReason,
     VerdictKind,
@@ -27,9 +28,18 @@ from witnessgap.source import (
     DecodedWorld,
     SealedWorldSource,
     WorldSourceAdapter,
+    package_implementation_digest,
 )
 
 VERIFIER_MAX_ATOMS = 12
+_VERIFIER_IMPLEMENTATION_PATHS = (
+    "adapters.py",
+    "canonical.py",
+    "identifiability.py",
+    "model.py",
+    "source.py",
+    "verifier.py",
+)
 
 
 class VerificationError(ValueError):
@@ -126,7 +136,23 @@ class VerifiedAttribution:
 
     registry_digest: str
     evidence_digest: str
+    adapter_implementation_digest: str
+    verifier_implementation_digest: str
+    panel_root: str
     proof_root: str
+    kind: VerdictKind
+    compatible_completion_commitments: tuple[str, ...]
+    target_family: TargetFamily | None = None
+    unknown_reason: UnknownReason | None = None
+    ambiguity_commitments: tuple[str, str] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _AttributionBody:
+    registry_digest: str
+    evidence_digest: str
+    adapter_implementation_digest: str
+    panel_root: str
     kind: VerdictKind
     compatible_completion_commitments: tuple[str, ...]
     target_family: TargetFamily | None = None
@@ -144,6 +170,8 @@ def verify_registry_attribution(  # noqa: PLR0912
     """Rebuild the committed family from source openings and derive a verdict."""
 
     _validate_source_openings(sources)
+    _preflight_manifest(manifest)
+    _validate_evidence(evidence)
     if manifest.digest != trusted_registry_digest:
         raise VerificationError("registry manifest does not match the trusted digest")
     if (
@@ -183,7 +211,7 @@ def verify_registry_attribution(  # noqa: PLR0912
 
     compatible = tuple(panels[index] for index in compatible_indexes)
     compatibility = tuple(index in compatible_indexes for index in range(len(panels)))
-    proof_root = _proof_root(tuple(panels), compatibility)
+    panel_root = _panel_root(tuple(panels), compatibility)
     profiles = {panel.target_family for panel in compatible}
     compatible_commitments = tuple(panel.completion_commitment for panel in compatible)
     verified_evidence_digest = evidence_digest(evidence)
@@ -191,28 +219,34 @@ def verify_registry_attribution(  # noqa: PLR0912
     if len(profiles) > 1:
         left = compatible[0]
         right = next(panel for panel in compatible[1:] if panel.target_family != left.target_family)
-        return VerifiedAttribution(
-            registry_digest=trusted_registry_digest,
-            evidence_digest=verified_evidence_digest,
-            proof_root=proof_root,
-            kind=VerdictKind.NOT_IDENTIFIABLE,
-            compatible_completion_commitments=compatible_commitments,
-            unknown_reason=UnknownReason.AMBIGUOUS_WORLDS,
-            ambiguity_commitments=(
-                left.completion_commitment,
-                right.completion_commitment,
+        return _finalize_attribution(
+            _AttributionBody(
+                registry_digest=trusted_registry_digest,
+                evidence_digest=verified_evidence_digest,
+                adapter_implementation_digest=manifest.adapter_implementation_digest,
+                panel_root=panel_root,
+                kind=VerdictKind.NOT_IDENTIFIABLE,
+                compatible_completion_commitments=compatible_commitments,
+                unknown_reason=UnknownReason.AMBIGUOUS_WORLDS,
+                ambiguity_commitments=(
+                    left.completion_commitment,
+                    right.completion_commitment,
+                ),
             ),
         )
 
     profile = profiles.pop()
     if not profile:
-        return VerifiedAttribution(
-            registry_digest=trusted_registry_digest,
-            evidence_digest=verified_evidence_digest,
-            proof_root=proof_root,
-            kind=VerdictKind.NOT_IDENTIFIABLE,
-            compatible_completion_commitments=compatible_commitments,
-            unknown_reason=UnknownReason.NO_REPAIR_IN_DECLARED_ALGEBRA,
+        return _finalize_attribution(
+            _AttributionBody(
+                registry_digest=trusted_registry_digest,
+                evidence_digest=verified_evidence_digest,
+                adapter_implementation_digest=manifest.adapter_implementation_digest,
+                panel_root=panel_root,
+                kind=VerdictKind.NOT_IDENTIFIABLE,
+                compatible_completion_commitments=compatible_commitments,
+                unknown_reason=UnknownReason.NO_REPAIR_IN_DECLARED_ALGEBRA,
+            )
         )
     if len(profile) > 1:
         kind = VerdictKind.ALTERNATIVE_MINIMAL_REPAIRS
@@ -220,13 +254,16 @@ def verify_registry_attribution(  # noqa: PLR0912
         kind = VerdictKind.IDENTIFIED_COMPOUND
     else:
         kind = VerdictKind.IDENTIFIED_SINGLETON
-    return VerifiedAttribution(
-        registry_digest=trusted_registry_digest,
-        evidence_digest=verified_evidence_digest,
-        proof_root=proof_root,
-        kind=kind,
-        compatible_completion_commitments=compatible_commitments,
-        target_family=profile,
+    return _finalize_attribution(
+        _AttributionBody(
+            registry_digest=trusted_registry_digest,
+            evidence_digest=verified_evidence_digest,
+            adapter_implementation_digest=manifest.adapter_implementation_digest,
+            panel_root=panel_root,
+            kind=kind,
+            compatible_completion_commitments=compatible_commitments,
+            target_family=profile,
+        )
     )
 
 
@@ -239,6 +276,11 @@ def verify_source_panel(
 
     if type(source) is not SealedWorldSource:
         raise VerificationError("source must be an exact SealedWorldSource")
+    try:
+        source.validate()
+    except (TypeError, ValueError) as error:
+        raise VerificationError("source opening failed runtime validation") from error
+    _preflight_manifest(manifest)
     try:
         adapter = resolve_trusted_adapter(
             manifest.adapter_id,
@@ -553,18 +595,85 @@ def _preflight_evidence(evidence: Evidence, manifest: RegistryManifest) -> None:
         )
 
 
+def _preflight_manifest(manifest: object) -> None:
+    if type(manifest) is not RegistryManifest:
+        raise VerificationError("manifest must be an exact RegistryManifest")
+    try:
+        manifest.validate()
+        encoded = manifest.to_canonical_bytes()
+        parsed = RegistryManifest.from_canonical_bytes(encoded)
+    except (RegistryError, TypeError, ValueError) as error:
+        raise VerificationError("registry manifest failed closed-schema validation") from error
+    if parsed != manifest or parsed.to_canonical_bytes() != encoded:
+        raise VerificationError("registry manifest failed canonical round-trip")
+
+
+def _validate_evidence(evidence: object) -> None:
+    if type(evidence) is not Evidence:
+        raise VerificationError("evidence must be an exact Evidence value")
+    try:
+        evidence.validate()
+    except (TypeError, ValueError) as error:
+        raise VerificationError("evidence failed nested runtime validation") from error
+
+
 def _validate_source_openings(sources: object) -> None:
     if not isinstance(sources, tuple):
         raise VerificationError("source openings must be supplied as a tuple")
     if any(type(source) is not SealedWorldSource for source in sources):
         raise VerificationError("every source opening must be an exact SealedWorldSource")
+    try:
+        for source in sources:
+            source.validate()
+    except (TypeError, ValueError) as error:
+        raise VerificationError("source opening failed runtime validation") from error
 
 
 def _witness_for_mask(mask: int, atom_names: tuple[str, ...]) -> Witness:
     return tuple(name for index, name in enumerate(atom_names) if mask & (1 << index))
 
 
-def _proof_root(
+def _finalize_attribution(body: _AttributionBody) -> VerifiedAttribution:
+    verifier_digest = verifier_implementation_digest()
+    payload: dict[str, JsonValue] = {
+        "adapter_implementation_digest": body.adapter_implementation_digest,
+        "ambiguity_commitments": body.ambiguity_commitments,
+        "compatible_completion_commitments": body.compatible_completion_commitments,
+        "evidence_digest": body.evidence_digest,
+        "format": "witnessgap.attribution-certificate.v1",
+        "kind": body.kind.value,
+        "panel_root": body.panel_root,
+        "registry_digest": body.registry_digest,
+        "target_family": body.target_family,
+        "unknown_reason": (body.unknown_reason.value if body.unknown_reason is not None else None),
+        "verifier_implementation_digest": verifier_digest,
+    }
+    proof_root = canonical_digest("witnessgap.attribution-certificate.v1", payload)
+    return VerifiedAttribution(
+        registry_digest=body.registry_digest,
+        evidence_digest=body.evidence_digest,
+        adapter_implementation_digest=body.adapter_implementation_digest,
+        verifier_implementation_digest=verifier_digest,
+        panel_root=body.panel_root,
+        proof_root=proof_root,
+        kind=body.kind,
+        compatible_completion_commitments=body.compatible_completion_commitments,
+        target_family=body.target_family,
+        unknown_reason=body.unknown_reason,
+        ambiguity_commitments=body.ambiguity_commitments,
+    )
+
+
+def verifier_implementation_digest() -> str:
+    """Digest the exact installed modules that implement certificate checks."""
+
+    return package_implementation_digest(
+        "witnessgap.verifier-implementation.v1",
+        _VERIFIER_IMPLEMENTATION_PATHS,
+    )
+
+
+def _panel_root(
     panels: tuple[VerifiedPanel, ...],
     compatibility: tuple[bool, ...],
 ) -> str:

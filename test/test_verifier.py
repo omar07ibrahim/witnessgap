@@ -260,16 +260,60 @@ def test_verifier_rejects_an_untrusted_adapter_implementation_digest() -> None:
 def test_verifier_rejects_undeclared_probe_before_source_replay() -> None:
     worlds = workspace_twins()
     registry = CandidateRegistry.build(worlds)
+    forged_manifest = replace(
+        registry.manifest,
+        adapter_id="forged_workspace_adapter",
+    )
     evidence = replace(
         registry.observe(worlds[0].world_id),
+        registry_digest=forged_manifest.digest,
         probes=(ProbeObservation(name="cause", value=b"environment"),),
     )
 
     with pytest.raises(VerificationError, match="undeclared probes"):
         verify_registry_attribution(
             workspace_sources(),
+            manifest=forged_manifest,
+            trusted_registry_digest=forged_manifest.digest,
+            evidence=evidence,
+        )
+
+
+def test_verifier_revalidates_nested_evidence_at_runtime() -> None:
+    worlds = workspace_twins()
+    registry = CandidateRegistry.build(worlds)
+    evidence = registry.observe(worlds[0].world_id)
+    object.__setattr__(
+        evidence,
+        "probes",
+        (cast(ProbeObservation, object()),),
+    )
+
+    with pytest.raises(VerificationError, match="nested runtime validation"):
+        verify_registry_attribution(
+            workspace_sources(),
             manifest=registry.manifest,
             trusted_registry_digest=registry.manifest.digest,
+            evidence=evidence,
+        )
+
+
+def test_verifier_revalidates_the_manifest_at_runtime() -> None:
+    worlds = workspace_twins()
+    registry = CandidateRegistry.build(worlds)
+    evidence = registry.observe(worlds[0].world_id)
+    duplicate = registry.manifest.candidate_commitments[0]
+    object.__setattr__(
+        registry.manifest,
+        "candidate_commitments",
+        (duplicate, duplicate),
+    )
+
+    with pytest.raises(VerificationError, match="closed-schema validation"):
+        verify_registry_attribution(
+            workspace_sources(),
+            manifest=registry.manifest,
+            trusted_registry_digest=evidence.registry_digest,
             evidence=evidence,
         )
 
@@ -293,3 +337,33 @@ def test_proof_roots_are_byte_deterministic() -> None:
     )
 
     assert first == second
+
+
+def test_certificate_root_binds_evidence_even_when_panel_compatibility_is_equal() -> None:
+    worlds = workspace_twins()
+    registry = CandidateRegistry.build(worlds)
+    trace_only = registry.observe(worlds[0].world_id)
+    owner_probe = registry.observe(
+        worlds[0].world_id,
+        probes=("workspace_owner",),
+    )
+
+    trace_certificate = verify_registry_attribution(
+        workspace_sources(),
+        manifest=registry.manifest,
+        trusted_registry_digest=registry.manifest.digest,
+        evidence=trace_only,
+    )
+    owner_certificate = verify_registry_attribution(
+        workspace_sources(),
+        manifest=registry.manifest,
+        trusted_registry_digest=registry.manifest.digest,
+        evidence=owner_probe,
+    )
+
+    assert trace_certificate.compatible_completion_commitments == (
+        owner_certificate.compatible_completion_commitments
+    )
+    assert trace_certificate.panel_root == owner_certificate.panel_root
+    assert trace_certificate.evidence_digest != owner_certificate.evidence_digest
+    assert trace_certificate.proof_root != owner_certificate.proof_root

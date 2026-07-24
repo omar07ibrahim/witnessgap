@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 
 import pytest
 
-from witnessgap.canonical import JsonValue, canonical_digest
+from witnessgap.canonical import JsonValue, canonical_digest, canonical_json
 from witnessgap.identifiability import (
     CandidateRegistry,
     Evidence,
@@ -12,6 +12,7 @@ from witnessgap.identifiability import (
     InterventionObservation,
     ProbeObservation,
     RegistryError,
+    RegistryManifest,
     UnknownReason,
     VerdictKind,
 )
@@ -354,6 +355,45 @@ def test_manifest_binds_evidence_and_the_declared_candidate_family() -> None:
     forged = replace(evidence, registry_digest="0" * 64)
     with pytest.raises(EvidenceMismatchError, match="registry manifest"):
         registry.attribute(forged)
+
+
+def test_manifest_has_one_closed_canonical_round_trip() -> None:
+    manifest = CandidateRegistry.build(workspace_twins()).manifest
+    encoded = manifest.to_canonical_bytes()
+
+    parsed = RegistryManifest.from_canonical_bytes(encoded)
+
+    assert parsed == manifest
+    assert parsed.to_canonical_bytes() == encoded
+    assert parsed.digest == manifest.digest
+
+
+def test_manifest_parser_rejects_noncanonical_and_open_schemas() -> None:
+    manifest = CandidateRegistry.build(workspace_twins()).manifest
+    open_payload = manifest.to_payload()
+    open_payload["uncommitted_hint"] = "environment"
+
+    with pytest.raises(RegistryError, match="canonical JSON"):
+        RegistryManifest.from_canonical_bytes(manifest.to_canonical_bytes().rstrip(b"\n"))
+    with pytest.raises(RegistryError, match="unknown or missing"):
+        RegistryManifest.from_canonical_bytes(canonical_json(open_payload))
+
+
+def test_manifest_parser_rejects_a_forged_coverage_digest() -> None:
+    manifest = CandidateRegistry.build(workspace_twins()).manifest
+    payload = manifest.to_payload()
+    payload["coverage_manifest_digest"] = "0" * 64
+
+    with pytest.raises(RegistryError, match="coverage manifest digest"):
+        RegistryManifest.from_canonical_bytes(canonical_json(payload))
+
+
+def test_manifest_constructor_rejects_duplicate_candidate_commitments() -> None:
+    manifest = CandidateRegistry.build(workspace_twins()).manifest
+    duplicate = manifest.candidate_commitments[0]
+
+    with pytest.raises(RegistryError, match="candidate_commitments"):
+        replace(manifest, candidate_commitments=(duplicate, duplicate))
 
 
 def test_workspace_completion_ids_are_opaque() -> None:

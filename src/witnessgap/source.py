@@ -27,6 +27,11 @@ class SealedWorldSource:
     commitment_salt: bytes
 
     def __post_init__(self) -> None:
+        self.validate()
+
+    def validate(self) -> None:
+        """Recheck an opening after crossing an untrusted runtime boundary."""
+
         if not isinstance(self.source_bytes, bytes):
             raise TypeError("source_bytes must be bytes")
         if not self.source_bytes:
@@ -42,12 +47,14 @@ class SealedWorldSource:
     def snapshot_digest(self) -> str:
         """Digest of the exact decoder input, excluding the privacy salt."""
 
+        self.validate()
         return tagged_digest("witnessgap.source-snapshot.v1", self.source_bytes)
 
     @property
     def completion_commitment(self) -> str:
         """Salted commitment to the exact decoder input."""
 
+        self.validate()
         return tagged_digest(
             "witnessgap.world-completion.v2",
             self.commitment_salt + self.source_bytes,
