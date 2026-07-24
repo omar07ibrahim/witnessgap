@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import cast
 
 import pytest
@@ -217,3 +218,35 @@ def test_source_rejects_a_snapshot_outside_the_twin_construction() -> None:
 
     with pytest.raises(ValueError, match="alternate resolver"):
         record.to_canonical_bytes()
+
+
+def test_record_parser_rejects_excessive_nesting_as_a_value_error() -> None:
+    payload = b'{"format":' + (b"[" * 1_500) + b"0" + (b"]" * 1_500) + b"}\n"
+
+    with pytest.raises(ValueError, match="unsupported JSON values"):
+        TemplateRecord.from_canonical_bytes(payload)
+
+
+def test_record_parser_rejects_a_lone_surrogate_as_a_value_error() -> None:
+    payload = (
+        variant_record()
+        .to_canonical_bytes()
+        .replace(
+            b'"Northstar release notes"',
+            b'"\\ud800"',
+            1,
+        )
+    )
+
+    with pytest.raises(ValueError, match="unsupported JSON values"):
+        VariantRecord.from_canonical_bytes(payload)
+
+
+def test_record_parser_rejects_oversized_payloads_before_decoding() -> None:
+    with pytest.raises(ValueError, match="byte limit"):
+        TemplateRecord.from_canonical_bytes(b"{" + (b" " * 65_536) + b"}")
+
+
+def test_display_validation_rejects_lone_surrogates() -> None:
+    with pytest.raises(ValueError, match="Unicode scalar"):
+        replace(variant_record(), subject_display="\ud800")

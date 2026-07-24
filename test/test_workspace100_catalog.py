@@ -14,6 +14,7 @@ from witnessgap.workspace100.catalog import (
     participant_facing_leaks,
     template_catalog_digest,
     validate_authored_catalog,
+    validate_frozen_catalog,
     variant_catalog_digest,
 )
 from witnessgap.workspace100.records import Split, TemplateId
@@ -145,6 +146,20 @@ def test_recursive_leak_scan_includes_nested_keys_and_values() -> None:
     )
 
 
+def test_leak_scan_rejects_internal_twin_side_aliases() -> None:
+    assert participant_facing_leaks(
+        {
+            "completion_side": "selector_aligned",
+            "nested": {"side_label": "resolver_aligned"},
+        }
+    ) == (
+        "$.<key>:completion_side",
+        "$.completion_side:selector_aligned",
+        "$.nested.<key>:side_label",
+        "$.nested.side_label:resolver_aligned",
+    )
+
+
 def test_catalog_digests_are_stable_nonempty_sha256_values() -> None:
     assert template_catalog_digest() == TEMPLATE_CATALOG_DIGEST
     assert variant_catalog_digest() == VARIANT_CATALOG_DIGEST
@@ -173,3 +188,15 @@ def test_catalog_validator_rejects_a_crafted_participant_leak() -> None:
 
     with pytest.raises(ValueError, match="leaks reserved terms"):
         validate_authored_catalog(variants=crafted)
+
+
+def test_frozen_catalog_rejects_a_structurally_valid_drift() -> None:
+    changed = replace(
+        VARIANTS[0],
+        intended_concrete_id="revision_northstar_32",
+    )
+    crafted = (changed, *VARIANTS[1:])
+
+    validate_authored_catalog(variants=crafted)
+    with pytest.raises(ValueError, match="frozen protocol digest"):
+        validate_frozen_catalog(variants=crafted)

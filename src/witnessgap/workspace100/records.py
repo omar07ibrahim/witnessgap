@@ -20,6 +20,7 @@ _VARIANT_ID = re.compile(r"^v[0-9]{2}$")
 _MAX_DISPLAY_LENGTH = 240
 _RESOLVER_SIZE = 2
 _CONTROL_CHARACTER_BOUNDARY = 32
+_MAX_RECORD_BYTES = 1 << 16
 
 
 class TemplateId(StrEnum):
@@ -561,13 +562,15 @@ def _required_resolver(
 def _canonical_object(payload: bytes, *, label: str) -> dict[str, object]:
     if type(payload) is not bytes:
         raise TypeError(f"{label} payload must be exact bytes")
+    if len(payload) > _MAX_RECORD_BYTES:
+        raise ValueError(f"{label} exceeds the {_MAX_RECORD_BYTES}-byte limit")
     try:
         raw: object = json.loads(payload)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as error:
         raise ValueError(f"{label} is not valid UTF-8 JSON") from error
     try:
         canonical = type(raw) is dict and canonical_json(cast(JsonValue, raw)) == payload
-    except TypeError as error:
+    except (TypeError, UnicodeEncodeError, RecursionError) as error:
         raise ValueError(f"{label} contains unsupported JSON values") from error
     if not canonical:
         raise ValueError(f"{label} is not one canonical JSON object")
@@ -587,11 +590,16 @@ def _require_identifier(value: object, *, field: str) -> None:
 
 
 def _require_display(value: object, *, field: str) -> None:
+    if type(value) is not str:
+        raise ValueError(f"{field} must be a trimmed printable string")
     if (
-        type(value) is not str
-        or not value
+        not value
         or value != value.strip()
         or len(value) > _MAX_DISPLAY_LENGTH
         or any(ord(character) < _CONTROL_CHARACTER_BOUNDARY for character in value)
     ):
         raise ValueError(f"{field} must be a trimmed printable string")
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise ValueError(f"{field} must contain valid Unicode scalar values") from error

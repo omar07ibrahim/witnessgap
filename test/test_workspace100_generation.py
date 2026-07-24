@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
+from hashlib import sha256
 from typing import cast
 
 import pytest
 
 from witnessgap.canonical import JsonValue
+from witnessgap.source import SealedWorldSource
+from witnessgap.workspace100 import generation as generation_module
+from witnessgap.workspace100.catalog import VARIANTS
 from witnessgap.workspace100.generation import (
+    GeneratedCompletion,
+    GeneratedPair,
     Workspace100Corpus,
     construction_matrix,
     generate_workspace100,
@@ -151,6 +158,103 @@ def test_root_manifest_does_not_embed_the_release_seed(
     assert len(corpus.root) == _SHA256_HEX_LENGTH
 
 
+def test_pair_rejects_two_completions_with_the_same_twin_shape(
+    corpus: Workspace100Corpus,
+) -> None:
+    original_pair = corpus.pairs[0]
+    selector_aligned = next(
+        completion
+        for completion in original_pair.completions
+        if completion.record.selected_selector == completion.record.goal_selector
+    )
+    duplicate_shape = _reseal(
+        replace(
+            selector_aligned.record,
+            initial_epoch_id="draft_index_shadow_001",
+        ),
+        domain=b"duplicate-shape",
+    )
+    completions = cast(
+        tuple[GeneratedCompletion, GeneratedCompletion],
+        tuple(
+            sorted(
+                (selector_aligned, duplicate_shape),
+                key=lambda completion: completion.completion_commitment,
+            )
+        ),
+    )
+
+    with pytest.raises(ValueError, match="complementary twin"):
+        GeneratedPair(
+            pair_id=original_pair.pair_id,
+            task_id=original_pair.task_id,
+            template_id=original_pair.template_id,
+            variant_id=original_pair.variant_id,
+            split=original_pair.split,
+            completions=completions,
+        )
+
+
+def test_corpus_rejects_sources_that_drift_from_the_authored_variant(
+    corpus: Workspace100Corpus,
+) -> None:
+    original_pair = corpus.pairs[0]
+    crafted_completions = tuple(
+        _reseal(
+            replace(
+                completion.record,
+                public_task=f"{completion.record.public_task} Proceed after review.",
+            ),
+            domain=f"catalog-drift-{index}".encode(),
+        )
+        for index, completion in enumerate(original_pair.completions)
+    )
+    ordered = cast(
+        tuple[GeneratedCompletion, GeneratedCompletion],
+        tuple(
+            sorted(
+                crafted_completions,
+                key=lambda completion: completion.completion_commitment,
+            )
+        ),
+    )
+    commitments = cast(
+        tuple[str, str],
+        tuple(completion.completion_commitment for completion in ordered),
+    )
+    crafted_pair = GeneratedPair(
+        pair_id=generation_module._pair_id(commitments),
+        task_id=original_pair.task_id,
+        template_id=original_pair.template_id,
+        variant_id=original_pair.variant_id,
+        split=original_pair.split,
+        completions=ordered,
+    )
+
+    with pytest.raises(ValueError, match="frozen authored catalog"):
+        Workspace100Corpus(
+            protocol_id=corpus.protocol_id,
+            templates=corpus.templates,
+            variants=corpus.variants,
+            pairs=(crafted_pair, *corpus.pairs[1:]),
+        )
+
+
+def test_generation_rejects_post_import_frozen_catalog_mutation() -> None:
+    variant = VARIANTS[0]
+    original = variant.intended_concrete_id
+    object.__setattr__(
+        variant,
+        "intended_concrete_id",
+        "revision_northstar_99",
+    )
+    try:
+        with pytest.raises(ValueError, match="frozen protocol digest"):
+            generate_workspace100(_SEED)
+    finally:
+        object.__setattr__(variant, "intended_concrete_id", original)
+
+
 @pytest.mark.parametrize("seed", [b"", b"x" * 31, b"x" * 33])
 def test_generation_rejects_wrong_seed_lengths(seed: bytes) -> None:
     with pytest.raises(ValueError, match="32 bytes"):
@@ -192,3 +296,20 @@ def _walk_strings(value: JsonValue) -> tuple[str, ...]:
         sequence = cast(tuple[JsonValue, ...] | list[JsonValue], value)
         return tuple(string for nested in sequence for string in _walk_strings(nested))
     return ()
+
+
+def _reseal(
+    record: CompletionSourceRecord,
+    *,
+    domain: bytes,
+) -> GeneratedCompletion:
+    source_bytes = record.to_canonical_bytes()
+    source = SealedWorldSource(
+        source_bytes=source_bytes,
+        commitment_salt=sha256(domain + source_bytes).digest(),
+    )
+    return GeneratedCompletion(
+        episode_id=f"wge_{source.completion_commitment[:24]}",
+        record=record,
+        source=source,
+    )

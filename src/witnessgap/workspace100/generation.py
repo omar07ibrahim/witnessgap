@@ -12,7 +12,7 @@ from witnessgap.workspace100.catalog import (
     TEMPLATES,
     VARIANTS,
     template_catalog_digest,
-    validate_authored_catalog,
+    validate_frozen_catalog,
     variant_catalog_digest,
 )
 from witnessgap.workspace100.records import (
@@ -109,6 +109,16 @@ class GeneratedPair:
                 or record.variant_id != self.variant_id
             ):
                 raise ValueError("generated completion identity contradicts its pair")
+        records = tuple(completion.record for completion in self.completions)
+        selector_aligned = tuple(
+            record for record in records if record.selected_selector == record.goal_selector
+        )
+        resolver_aligned = tuple(
+            record for record in records if record.selected_selector != record.goal_selector
+        )
+        if len(selector_aligned) != 1 or len(resolver_aligned) != 1:
+            raise ValueError("generated pair must contain complementary twin source shapes")
+        _validate_twin_construction(selector_aligned[0], resolver_aligned[0])
         commitments = cast(
             tuple[str, str],
             tuple(completion.completion_commitment for completion in self.completions),
@@ -153,7 +163,7 @@ class Workspace100Corpus:
             or any(type(pair) is not GeneratedPair for pair in self.pairs)
         ):
             raise TypeError("corpus must contain 50 exact generated pairs")
-        validate_authored_catalog(self.templates, self.variants)
+        validate_frozen_catalog(self.templates, self.variants)
         for pair in self.pairs:
             pair.validate()
         expected_keys = tuple(
@@ -165,6 +175,7 @@ class Workspace100Corpus:
         template_splits = {template.template_id: template.split for template in self.templates}
         if any(pair.split is not template_splits[pair.template_id] for pair in self.pairs):
             raise ValueError("generated pair split contradicts its template")
+        _validate_pairs_match_authored_catalog(self)
         _validate_global_generation_uniqueness(self)
 
     @property
@@ -221,7 +232,7 @@ def generate_workspace100(seed: bytes) -> Workspace100Corpus:
         raise TypeError("Workspace-100 seed must be exact bytes")
     if len(seed) != _SEED_BYTES:
         raise ValueError(f"Workspace-100 seed must contain {_SEED_BYTES} bytes")
-    validate_authored_catalog(TEMPLATES, VARIANTS)
+    validate_frozen_catalog(TEMPLATES, VARIANTS)
     templates_by_id = {template.template_id: template for template in TEMPLATES}
     pairs: list[GeneratedPair] = []
     for variant in VARIANTS:
@@ -385,6 +396,8 @@ def _validate_twin_construction(
     selector_aligned: CompletionSourceRecord,
     resolver_aligned: CompletionSourceRecord,
 ) -> None:
+    if _shared_source_payload(selector_aligned) != _shared_source_payload(resolver_aligned):
+        raise ValueError("twin sources do not share one authored task declaration")
     intended = selector_aligned.intended_concrete_id
     observed = selector_aligned.observed_concrete_id
     if (
@@ -400,6 +413,15 @@ def _validate_twin_construction(
         raise ValueError("resolver-aligned source violates the intervention matrix")
     if selector_aligned.to_canonical_bytes() == resolver_aligned.to_canonical_bytes():
         raise ValueError("twin completion source bytes must be distinct")
+
+
+def _shared_source_payload(
+    record: CompletionSourceRecord,
+) -> dict[str, JsonValue]:
+    payload = record.to_payload()
+    for field in ("initial_epoch_id", "initial_resolver", "selected_selector"):
+        del payload[field]
+    return payload
 
 
 def _resolve_record(
@@ -469,6 +491,24 @@ def _validate_global_generation_uniqueness(corpus: Workspace100Corpus) -> None:
     for label, values in unique_fields.items():
         if len(set(values)) != len(values):
             raise ValueError(f"generated {label} must be globally unique")
+
+
+def _validate_pairs_match_authored_catalog(corpus: Workspace100Corpus) -> None:
+    templates = {template.template_id: template for template in corpus.templates}
+    variants = {(variant.template_id, variant.variant_id): variant for variant in corpus.variants}
+    for pair in corpus.pairs:
+        template = templates[pair.template_id]
+        variant = variants[(pair.template_id, pair.variant_id)]
+        expected_records = _completion_records(template, variant)
+        expected_sources = sorted(record.to_canonical_bytes() for record in expected_records)
+        actual_sources = sorted(
+            completion.record.to_canonical_bytes() for completion in pair.completions
+        )
+        if actual_sources != expected_sources:
+            raise ValueError(
+                f"{pair.template_id.value}/{pair.variant_id} sources differ "
+                "from the frozen authored catalog"
+            )
     for label, values in (
         ("pair IDs", tuple(pair.pair_id for pair in corpus.pairs)),
         ("task IDs", tuple(pair.task_id for pair in corpus.pairs)),

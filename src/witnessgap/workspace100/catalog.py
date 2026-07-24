@@ -22,6 +22,12 @@ FORBIDDEN_PARTICIPANT_TERMS = (
     "bad",
     "fault",
     "cause",
+    "selector_aligned",
+    "resolver_aligned",
+    "completion_side",
+    "side_label",
+    "target_label",
+    "causal_target",
 )
 
 _VARIANT_IDS = (
@@ -1058,6 +1064,19 @@ def variant_catalog_digest(
     )
 
 
+def validate_frozen_catalog(
+    templates: tuple[TemplateRecord, ...] = TEMPLATES,
+    variants: tuple[VariantRecord, ...] = VARIANTS,
+) -> None:
+    """Require the exact catalog committed by Workspace-100-v1."""
+
+    validate_authored_catalog(templates, variants)
+    if template_catalog_digest(templates) != TEMPLATE_CATALOG_DIGEST:
+        raise ValueError("template catalog differs from the frozen protocol digest")
+    if variant_catalog_digest(variants) != VARIANT_CATALOG_DIGEST:
+        raise ValueError("variant catalog differs from the frozen protocol digest")
+
+
 def _validate_record_tuple(
     records: object,
     *,
@@ -1147,5 +1166,7 @@ def _scan_participant_value(
 
 validate_authored_catalog()
 
-TEMPLATE_CATALOG_DIGEST = template_catalog_digest()
-VARIANT_CATALOG_DIGEST = variant_catalog_digest()
+TEMPLATE_CATALOG_DIGEST = "f79b66036002be18d0ea565a938138a893e999ba56ffac4fb7e1b2eedf19a0ee"
+VARIANT_CATALOG_DIGEST = "86a2583224475a81d0485f0f0110e973156bac3c11c8e28aba337d12b6434aa3"
+
+validate_frozen_catalog()
