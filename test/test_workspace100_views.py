@@ -9,9 +9,10 @@ from dataclasses import replace
 
 import pytest
 
-from witnessgap.model import TargetFamily
+from witnessgap.model import Outcome, TargetFamily
 from witnessgap.workspace100 import views as views_module
 from witnessgap.workspace100.generation import Workspace100Corpus, generate_workspace100
+from witnessgap.workspace100.records import Split, TemplateId
 from witnessgap.workspace100.views import (
     VerifiedCompletionMaterial,
     VerifiedPairMaterial,
@@ -99,6 +100,15 @@ def test_verified_twin_views_preserve_neutral_and_separating_probes(
             left.probe_for(template.epoch_probe).value
             != right.probe_for(template.epoch_probe).value
         )
+        left_baseline = left.panel.receipt_for(())
+        right_baseline = right.panel.receipt_for(())
+        assert left_baseline.outcome is Outcome.FAILURE
+        assert right_baseline.outcome is Outcome.FAILURE
+        assert left_baseline.artifact.public_trace == right_baseline.artifact.public_trace
+        assert {left.panel.target_family, right.panel.target_family} == {
+            _ENVIRONMENT_TARGET,
+            _POLICY_TARGET,
+        }
 
 
 def test_verified_panels_balance_the_two_singleton_target_families(
@@ -147,6 +157,46 @@ def test_material_records_reject_cross_completion_and_cross_pair_transplants(
             manifest=second.manifest,
             completions=first.completions,
         )
+
+
+def test_material_records_bind_routing_metadata_to_verified_content(
+    materials: tuple[VerifiedPairMaterial, ...],
+) -> None:
+    pair = materials[0]
+    left, right = pair.completions
+
+    with pytest.raises(ValueError, match="pair_id contradicts"):
+        replace(pair, pair_id="wgp_" + "0" * 24)
+    with pytest.raises(ValueError, match="frozen template"):
+        replace(pair, template_id=TemplateId.MOVE_WORK_ITEM)
+    with pytest.raises(ValueError, match="frozen template"):
+        replace(pair, split=Split.TEST)
+    with pytest.raises(ValueError, match="episode_id contradicts"):
+        replace(left, episode_id=right.episode_id)
+
+
+def test_material_records_rederive_panels_instead_of_trusting_cached_labels(
+    materials: tuple[VerifiedPairMaterial, ...],
+) -> None:
+    pair = materials[0]
+    left, right = pair.completions
+
+    forged_panels = (
+        replace(left.panel, target_family=(("forged",),)),
+        replace(left.panel, minimal_witnesses=(("forged_intervention",),)),
+        replace(left.panel, receipts=()),
+        replace(left.panel, runner_contract_digest="0" * 64),
+    )
+    expected_messages = (
+        "target family contradicts",
+        "minimal witnesses contradict",
+        "complete exact receipt lattice",
+        "contracts differ",
+    )
+    for panel, message in zip(forged_panels, expected_messages, strict=True):
+        forged = replace(left, panel=panel)
+        with pytest.raises((TypeError, ValueError), match=message):
+            replace(pair, completions=(forged, right))
 
 
 def test_view_authoring_source_has_no_search_or_cached_panel_dependency() -> None:
