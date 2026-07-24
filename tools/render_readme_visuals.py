@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Render deterministic, source-derived README visuals for WitnessGap.
 
-The renderer uses only the Python standard library plus WitnessGap's own
-production modules.  It never reads benchmark result files, clocks, host
-paths, environment variables, or network resources.
+The renderer uses the Python standard library, WitnessGap's production
+modules, and explicitly declared repository inputs recorded in provenance.
+It does not use clocks, network resources, or host-specific output fields.
 """
 
 from __future__ import annotations
@@ -12,12 +12,16 @@ import argparse
 import ast
 import hashlib
 import json
+import re
+import subprocess
 import sys
+import tomllib
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, fields
 from functools import lru_cache
 from html import escape
+from math import gcd
 from pathlib import Path
 from types import ModuleType
 from typing import Final, cast
@@ -27,6 +31,12 @@ ROOT: Final = Path(__file__).resolve().parents[1]
 SRC: Final = ROOT / "src"
 OUTPUT_DIRECTORY: Final = ROOT / "docs" / "images" / "readme"
 MANIFEST_NAME: Final = "provenance.json"
+CANDIDATE_RECEIPT_PATH: Final = ROOT / "docs" / "evidence" / "workspace100-candidate-receipt.json"
+CANDIDATE_EVIDENCE_TOOL_PATH: Final = ROOT / "tools" / "workspace100_candidate_evidence.py"
+PYTHON_VERSION_PATH: Final = ROOT / ".python-version"
+DEVELOPMENT_LOCK_PATH: Final = ROOT / "requirements-dev.lock"
+PYPROJECT_PATH: Final = ROOT / "pyproject.toml"
+CI_WORKFLOW_PATH: Final = ROOT / ".github" / "workflows" / "ci.yml"
 
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
@@ -82,6 +92,9 @@ _EXPECTED_BASELINE_COUNT: Final = 4
 _EXPECTED_RUN_COUNT: Final = 1_200
 _EXPECTED_RELEASE_PAYLOAD_COUNT: Final = 13
 _EXPECTED_RELEASE_BINDING_COUNT: Final = 25
+_EXPECTED_CANDIDATE_FILE_COUNT: Final = 14
+_EXPECTED_CANDIDATE_RUN_COUNT: Final = 1_200
+_EXPECTED_BUILTIN_SCORE_COUNT: Final = 4
 _TWO_COLUMN_BINDING_THRESHOLD: Final = 8
 _VALIDATION_SEED: Final = hashlib.sha256(
     b"witnessgap.readme-visuals.workspace100-validation.v1"
@@ -112,6 +125,7 @@ class Visual:
     nonclaims: tuple[str, ...]
     facts: Mapping[str, object]
     svg: bytes
+    source_files: tuple[Path, ...] = ()
 
 
 class Svg:
@@ -314,6 +328,21 @@ def _module_path(module: ModuleType) -> Path:
 
 def _relative_module_path(module: ModuleType) -> str:
     return _module_path(module).relative_to(ROOT).as_posix()
+
+
+def _source_path(path: Path) -> Path:
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(ROOT)
+    except ValueError as error:
+        raise RuntimeError(f"visual source escaped repository: {resolved}") from error
+    if not resolved.is_file():
+        raise RuntimeError(f"visual source is not a regular file: {resolved}")
+    return resolved
+
+
+def _relative_source_path(path: Path) -> str:
+    return _source_path(path).relative_to(ROOT).as_posix()
 
 
 def _sha256(payload: bytes) -> str:
@@ -1577,6 +1606,881 @@ def _render_isolation_boundary() -> Visual:
     )
 
 
+def _object_value(value: object, *, label: str) -> dict[str, object]:
+    if type(value) is not dict:
+        raise RuntimeError(f"{label} must be an object")
+    return cast(dict[str, object], value)
+
+
+def _array_value(value: object, *, label: str) -> list[object]:
+    if type(value) is not list:
+        raise RuntimeError(f"{label} must be an array")
+    return cast(list[object], value)
+
+
+def _string_value(value: object, *, label: str) -> str:
+    if type(value) is not str:
+        raise RuntimeError(f"{label} must be a string")
+    return value
+
+
+def _integer_value(value: object, *, label: str) -> int:
+    if type(value) is not int:
+        raise RuntimeError(f"{label} must be an integer")
+    return value
+
+
+@lru_cache(maxsize=1)
+def _candidate_receipt_payload() -> dict[str, object]:
+    raw = _source_path(CANDIDATE_RECEIPT_PATH).read_bytes()
+    try:
+        decoded: object = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RuntimeError("candidate receipt is not valid UTF-8 JSON") from error
+    payload = _object_value(decoded, label="candidate receipt")
+    canonical = (
+        json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode("utf-8")
+    if canonical != raw:
+        raise RuntimeError("candidate receipt is not canonical JSON")
+
+    counts = _object_value(payload.get("counts"), label="candidate counts")
+    statuses = _object_value(counts.get("worker_status"), label="candidate worker status")
+    files = _array_value(payload.get("files"), label="candidate files")
+    scores = _array_value(payload.get("scores"), label="candidate scores")
+    if (
+        payload.get("format") != "witnessgap.workspace100-development-candidate-receipt.v1"
+        or payload.get("official") is not False
+        or payload.get("protocol_id") != "workspace-100-v1"
+        or payload.get("release_kind") != "pre_release_reproducibility_candidate"
+        or payload.get("root_authentication") != "not_established_by_this_receipt"
+        or payload.get("gate16_status") != "not_established"
+        or counts.get("worker_runs") != _EXPECTED_CANDIDATE_RUN_COUNT
+        or statuses != {"claimed": _EXPECTED_CANDIDATE_RUN_COUNT, "failed": 0}
+        or counts.get("payload_files") != _EXPECTED_RELEASE_PAYLOAD_COUNT
+        or counts.get("tree_files") != _EXPECTED_CANDIDATE_FILE_COUNT
+        or len(files) != _EXPECTED_CANDIDATE_FILE_COUNT
+        or len(scores) != _EXPECTED_BUILTIN_SCORE_COUNT
+    ):
+        raise RuntimeError("candidate receipt identity or reviewed cardinalities changed")
+    return payload
+
+
+@lru_cache(maxsize=1)
+def _candidate_check_stdout() -> str:
+    payload = _candidate_receipt_payload()
+    receipt_root = _string_value(payload.get("receipt_root"), label="candidate receipt root")
+    expected = (
+        "verified non-official development candidate receipt "
+        f"{receipt_root}; independent authentication: not established\n"
+    )
+    completed = subprocess.run(
+        (sys.executable, str(CANDIDATE_EVIDENCE_TOOL_PATH), "check"),
+        cwd=ROOT,
+        env={
+            "LC_ALL": "C.UTF-8",
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONHASHSEED": "0",
+            "PYTHONNOUSERSITE": "1",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if completed.returncode != 0 or completed.stderr or completed.stdout != expected:
+        raise RuntimeError("candidate evidence CLI output or verification status changed")
+    return completed.stdout.removesuffix("\n")
+
+
+def _validated_candidate_payload() -> dict[str, object]:
+    _candidate_check_stdout()
+    return _candidate_receipt_payload()
+
+
+@dataclass(frozen=True, slots=True)
+class ExactRate:
+    """One exact receipt rate with its observed and reduced fractions."""
+
+    numerator: int
+    denominator: int
+    ratio_numerator: int
+    ratio_denominator: int
+
+    @property
+    def observed(self) -> str:
+        return f"{self.numerator}/{self.denominator}"
+
+    @property
+    def reduced(self) -> str:
+        return f"{self.ratio_numerator}/{self.ratio_denominator}"
+
+
+def _exact_rate(value: object, *, label: str) -> ExactRate:
+    rate = _object_value(value, label=label)
+    ratio = _object_value(rate.get("ratio"), label=f"{label} ratio")
+    numerator = _integer_value(rate.get("numerator"), label=f"{label} numerator")
+    denominator = _integer_value(rate.get("denominator"), label=f"{label} denominator")
+    ratio_numerator = _integer_value(ratio.get("numerator"), label=f"{label} ratio numerator")
+    ratio_denominator = _integer_value(ratio.get("denominator"), label=f"{label} ratio denominator")
+    divisor = gcd(numerator, denominator)
+    if (
+        numerator < 0
+        or denominator <= 0
+        or numerator > denominator
+        or ratio.get("kind") != "ratio"
+        or ratio_numerator != numerator // divisor
+        or ratio_denominator != denominator // divisor
+    ):
+        raise RuntimeError(f"{label} is not a valid exact reduced rate")
+    return ExactRate(
+        numerator=numerator,
+        denominator=denominator,
+        ratio_numerator=ratio_numerator,
+        ratio_denominator=ratio_denominator,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateScore:
+    """The two displayed exact rates for one frozen built-in control."""
+
+    baseline: str
+    decisive_coverage: ExactRate
+    false_certainty_incidence: ExactRate
+
+
+def _candidate_scores() -> tuple[CandidateScore, ...]:
+    payload = _validated_candidate_payload()
+    raw_scores = _array_value(payload.get("scores"), label="candidate scores")
+    scores: list[CandidateScore] = []
+    for index, raw_score in enumerate(raw_scores):
+        score = _object_value(raw_score, label=f"candidate score {index}")
+        metrics = _object_value(score.get("metrics"), label=f"candidate score {index} metrics")
+        scores.append(
+            CandidateScore(
+                baseline=_string_value(
+                    score.get("baseline"), label=f"candidate score {index} baseline"
+                ),
+                decisive_coverage=_exact_rate(
+                    metrics.get("decisive_coverage"),
+                    label=f"candidate score {index} decisive coverage",
+                ),
+                false_certainty_incidence=_exact_rate(
+                    metrics.get("false_certainty_incidence"),
+                    label=f"candidate score {index} false-certainty incidence",
+                ),
+            )
+        )
+    expected_order = (
+        "always_unknown",
+        "forced_environment",
+        "refresh_success_only",
+        "refresh_outcome",
+    )
+    if tuple(score.baseline for score in scores) != expected_order:
+        raise RuntimeError("candidate frozen built-in control order changed")
+    if any(
+        score.decisive_coverage.denominator != _EXPECTED_CASE_COUNT
+        or score.false_certainty_incidence.denominator != _EXPECTED_CASE_COUNT
+        for score in scores
+    ):
+        raise RuntimeError("candidate score denominators changed")
+    return tuple(scores)
+
+
+def _rate_facts(rate: ExactRate) -> dict[str, object]:
+    return {
+        "denominator": rate.denominator,
+        "numerator": rate.numerator,
+        "ratio": {
+            "denominator": rate.ratio_denominator,
+            "numerator": rate.ratio_numerator,
+        },
+    }
+
+
+def _render_candidate_control_results() -> Visual:
+    payload = _validated_candidate_payload()
+    scores = _candidate_scores()
+    counts = _object_value(payload["counts"], label="candidate counts")
+    statuses = _object_value(counts["worker_status"], label="candidate worker status")
+    receipt_root = _string_value(payload["receipt_root"], label="candidate receipt root")
+    title = "Built-in control outcomes on the validated Workspace-100 candidate"
+    description = (
+        "Grouped horizontal bars show exact decisive-coverage and false-certainty-incidence "
+        "rates for four frozen rule-based controls in the validated development candidate. "
+        "The controls are descriptive protocol checks, not competitive systems. All 1,200 "
+        "worker runs produced claims and zero worker failures."
+    )
+    svg = Svg(1600, 1120, title=title, description=description)
+    svg.header(
+        "Workspace-100 / exact candidate receipt",
+        "Built-in control outcomes on 300 participant-visible cases",
+        "Four frozen rule-based controls for protocol interpretation — not competing systems.",
+    )
+
+    svg.rect(60, 170, 1480, 120, fill="#0e2630", stroke=_ACCENT)
+    svg.text(88, 208, "VALIDATED EXECUTION SCOPE", size=14, color=_ACCENT, weight=700)
+    svg.text(
+        88,
+        250,
+        (
+            f"{counts['worker_runs']:,} worker runs  ·  "
+            f"{statuses['claimed']:,} claimed  ·  {statuses['failed']} failed"
+        ),
+        size=25,
+        weight=700,
+    )
+    svg.pill(1160, 208, 340, "controls ≠ competitive systems", stroke=_GOLD)
+
+    chart_x = 470
+    chart_width = 780
+    ratio_x = 1280
+    svg.text(60, 340, "FROZEN CONTROL", size=13, color=_MUTED, weight=700)
+    svg.text(chart_x, 340, "0", size=13, color=_MUTED, anchor="middle")
+    svg.text(chart_x + chart_width // 3, 340, "1/3", size=13, color=_MUTED, anchor="middle")
+    svg.text(
+        chart_x + (2 * chart_width) // 3,
+        340,
+        "2/3",
+        size=13,
+        color=_MUTED,
+        anchor="middle",
+    )
+    svg.text(chart_x + chart_width, 340, "1", size=13, color=_MUTED, anchor="middle")
+    svg.text(ratio_x, 340, "EXACT OBSERVED = REDUCED", size=13, color=_MUTED, weight=700)
+    svg.pill(60, 360, 330, "decisive coverage", fill="#172b43", stroke=_BLUE)
+    svg.pill(60, 410, 330, "false-certainty incidence", fill="#2b1d28", stroke=_RED)
+
+    row_y = 500
+    for index, score in enumerate(scores):
+        y = row_y + index * 125
+        svg.rect(60, y - 42, 1480, 108, fill=_PANEL, stroke=_BORDER, radius=12)
+        svg.text(
+            88,
+            y + 5,
+            score.baseline,
+            size=18,
+            color=(_GOLD if score.baseline == "forced_environment" else _TEXT),
+            weight=700,
+        )
+        for offset, rate, color in (
+            (0, score.decisive_coverage, _BLUE),
+            (39, score.false_certainty_incidence, _RED),
+        ):
+            bar_y = y - 21 + offset
+            svg.rect(
+                chart_x,
+                bar_y,
+                chart_width,
+                22,
+                fill="#0b1728",
+                stroke=_BORDER,
+                stroke_width=1,
+                radius=6,
+            )
+            if rate.numerator:
+                svg.rect(
+                    chart_x,
+                    bar_y,
+                    chart_width * rate.numerator // rate.denominator,
+                    22,
+                    fill=color,
+                    stroke=color,
+                    stroke_width=1,
+                    radius=6,
+                )
+            svg.text(
+                ratio_x,
+                bar_y + 17,
+                f"{rate.observed} = {rate.reduced}",
+                size=15,
+                color=color,
+                weight=700,
+            )
+
+    svg.rect(60, 965, 1480, 58, fill="#211c37", stroke=_PURPLE, radius=12)
+    svg.text(
+        88,
+        1002,
+        f"receipt_root: {receipt_root}",
+        size=15,
+        color=_MUTED,
+    )
+    svg.footer(
+        "docs/evidence/workspace100-candidate-receipt.json · scores[]",
+        "development candidate; exact control outcomes are not external benchmark comparisons",
+    )
+    return Visual(
+        filename="candidate-control-results.svg",
+        title=title,
+        description=description,
+        source_modules=(),
+        source_files=(CANDIDATE_RECEIPT_PATH, CANDIDATE_EVIDENCE_TOOL_PATH),
+        nonclaims=(
+            "The four built-ins are frozen rule-based controls, not competitive systems.",
+            "The receipt is a non-official development candidate.",
+            "The receipt does not independently authenticate its release root.",
+        ),
+        facts={
+            "controls": [
+                {
+                    "baseline": score.baseline,
+                    "decisive_coverage": _rate_facts(score.decisive_coverage),
+                    "false_certainty_incidence": _rate_facts(score.false_certainty_incidence),
+                }
+                for score in scores
+            ],
+            "receipt_root": receipt_root,
+            "worker_status": statuses,
+            "worker_runs": counts["worker_runs"],
+        },
+        svg=svg.render(),
+    )
+
+
+def _render_candidate_check_transcript() -> Visual:
+    payload = _validated_candidate_payload()
+    stdout = _candidate_check_stdout()
+    roots = _object_value(payload["roots"], label="candidate roots")
+    receipt_root = _string_value(payload["receipt_root"], label="candidate receipt root")
+    release_root = _string_value(roots["release"], label="candidate release root")
+    title = "Deterministic candidate-receipt verification transcript"
+    description = (
+        "A reproducible command and its exact single-line deterministic standard output, "
+        "followed by exact receipt fields. The command validates local drift pins and the "
+        "committed candidate receipt; it explicitly does not establish independent "
+        "authentication."
+    )
+    svg = Svg(1600, 880, title=title, description=description)
+    svg.header(
+        "Workspace-100 / reproducible CLI evidence",
+        "Candidate receipt check: exact command and stdout",
+        "The renderer executes this check; the transcript is not a fabricated shell capture.",
+    )
+
+    svg.rect(60, 175, 1480, 115, fill=_PANEL, stroke=_BLUE)
+    svg.text(88, 213, "COMMAND", size=13, color=_BLUE, weight=700, letter_spacing=1)
+    svg.text(
+        88,
+        258,
+        "python tools/workspace100_candidate_evidence.py check",
+        size=22,
+        color=_TEXT,
+        weight=700,
+    )
+
+    svg.rect(60, 320, 1480, 135, fill="#0e2630", stroke=_ACCENT)
+    svg.text(88, 358, "EXACT STDOUT · ONE LINE", size=13, color=_ACCENT, weight=700)
+    svg.text(88, 409, stdout, size=13, color=_TEXT, weight=700)
+
+    svg.rect(60, 490, 1480, 255, fill=_PANEL, stroke=_PURPLE)
+    svg.text(88, 528, "EXACT COMMITTED RECEIPT FIELDS", size=13, color=_PURPLE, weight=700)
+    svg.multiline(
+        88,
+        570,
+        (
+            f"official: {str(payload['official']).lower()}",
+            f"release_kind: {payload['release_kind']}",
+            f"receipt_root: {receipt_root}",
+            f"release_root: {release_root}",
+            f"root_authentication: {payload['root_authentication']}",
+        ),
+        size=16,
+        color=_TEXT,
+        line_height=34,
+    )
+    svg.footer(
+        "tools/workspace100_candidate_evidence.py check · committed receipt",
+        "local integrity replay only; independent authentication is not established",
+    )
+    return Visual(
+        filename="candidate-check-transcript.svg",
+        title=title,
+        description=description,
+        source_modules=(),
+        source_files=(CANDIDATE_EVIDENCE_TOOL_PATH, CANDIDATE_RECEIPT_PATH),
+        nonclaims=(
+            "The transcript is not an independently authenticated attestation.",
+            "Pinned roots are local repository drift checks.",
+            "The development candidate is not an official Workspace-100 release.",
+        ),
+        facts={
+            "command": "python tools/workspace100_candidate_evidence.py check",
+            "official": payload["official"],
+            "receipt_root": receipt_root,
+            "release_kind": payload["release_kind"],
+            "release_root": release_root,
+            "root_authentication": payload["root_authentication"],
+            "stdout": stdout,
+        },
+        svg=svg.render(),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateArtifact:
+    """One exact file record from the committed candidate receipt."""
+
+    path: str
+    byte_length: int
+    mode: int
+    content_digest: str
+
+
+def _candidate_artifacts() -> tuple[CandidateArtifact, ...]:
+    payload = _validated_candidate_payload()
+    raw_files = _array_value(payload["files"], label="candidate files")
+    artifacts: list[CandidateArtifact] = []
+    for index, raw_file in enumerate(raw_files):
+        record = _object_value(raw_file, label=f"candidate file {index}")
+        artifact = CandidateArtifact(
+            path=_string_value(record.get("path"), label=f"candidate file {index} path"),
+            byte_length=_integer_value(
+                record.get("byte_length"), label=f"candidate file {index} byte length"
+            ),
+            mode=_integer_value(record.get("mode"), label=f"candidate file {index} mode"),
+            content_digest=_string_value(
+                record.get("content_digest"), label=f"candidate file {index} digest"
+            ),
+        )
+        if (
+            artifact.byte_length <= 0
+            or artifact.mode != RELEASE_FILE_MODE
+            or re.fullmatch(r"[0-9a-f]{64}", artifact.content_digest) is None
+        ):
+            raise RuntimeError(f"candidate file {artifact.path!r} has an invalid descriptor")
+        artifacts.append(artifact)
+    paths = tuple(artifact.path for artifact in artifacts)
+    if (
+        len(artifacts) != _EXPECTED_CANDIDATE_FILE_COUNT
+        or len(set(paths)) != len(paths)
+        or paths[:-1] != RELEASE_PAYLOAD_PATHS
+        or paths[-1] != RELEASE_MANIFEST_PATH
+    ):
+        raise RuntimeError("candidate receipt file inventory differs from release allowlist")
+    return tuple(artifacts)
+
+
+def _render_candidate_artifact_inventory() -> Visual:
+    payload = _validated_candidate_payload()
+    artifacts = _candidate_artifacts()
+    total_bytes = sum(artifact.byte_length for artifact in artifacts)
+    payload_bytes = sum(artifact.byte_length for artifact in artifacts[:-1])
+    manifest_bytes = artifacts[-1].byte_length
+    maximum_bytes = max(artifact.byte_length for artifact in artifacts)
+    title = "Workspace-100 candidate artifact inventory and exact sizes"
+    description = (
+        "All fourteen file records from the validated candidate receipt in canonical order. "
+        "Every row shows its release-relative path, exact mode, exact byte length, and a "
+        "proportional size bar. The total is exactly 5,610,036 bytes."
+    )
+    svg = Svg(1600, 1240, title=title, description=description)
+    svg.header(
+        "Workspace-100 / receipt-bound artifact tree",
+        "All 14 materialized files and exact byte lengths",
+        "13 payloads + release-manifest.json; order and sizes come from the validated receipt.",
+    )
+
+    svg.rect(60, 170, 1480, 112, fill="#0e2630", stroke=_ACCENT)
+    summary = (
+        ("TREE TOTAL", f"{total_bytes:,} bytes", _ACCENT),
+        ("13 PAYLOADS", f"{payload_bytes:,} bytes", _BLUE),
+        ("MANIFEST", f"{manifest_bytes:,} bytes", _PURPLE),
+        ("FILE MODE", f"{RELEASE_FILE_MODE:04o}", _GOLD),
+    )
+    for index, (heading, value, color) in enumerate(summary):
+        x = 88 + index * 365
+        svg.text(x, 208, heading, size=12, color=color, weight=700, letter_spacing=1)
+        svg.text(x, 250, value, size=22, weight=700)
+
+    svg.rect(60, 315, 1480, 750, fill=_PANEL, stroke=_BORDER, radius=12)
+    svg.text(86, 352, "#", size=13, color=_MUTED, weight=700)
+    svg.text(130, 352, "RELEASE-RELATIVE PATH", size=13, color=_MUTED, weight=700)
+    svg.text(790, 352, "MODE", size=13, color=_MUTED, weight=700)
+    svg.text(960, 352, "EXACT BYTES", size=13, color=_MUTED, weight=700, anchor="end")
+    svg.text(1010, 352, "RELATIVE SIZE", size=13, color=_MUTED, weight=700)
+    svg.line(84, 370, 1516, 370, color=_BORDER, width=2)
+
+    bar_x = 1010
+    bar_width = 455
+    for index, artifact in enumerate(artifacts, start=1):
+        y = 408 + (index - 1) * 46
+        color = _GOLD if artifact.path == RELEASE_MANIFEST_PATH else _BLUE
+        if index % 2 == 0:
+            svg.rect(78, y - 27, 1444, 39, fill="#0d1a2c", stroke="#0d1a2c", radius=4)
+        svg.text(86, y, f"{index:02d}", size=14, color=_MUTED)
+        svg.text(
+            130,
+            y,
+            artifact.path,
+            size=15,
+            color=color if artifact.path == RELEASE_MANIFEST_PATH else _TEXT,
+            weight=700 if artifact.path == RELEASE_MANIFEST_PATH else 400,
+        )
+        svg.text(790, y, f"{artifact.mode:04o}", size=14, color=_MUTED)
+        svg.text(
+            960,
+            y,
+            f"{artifact.byte_length:,}",
+            size=15,
+            color=_TEXT,
+            weight=700,
+            anchor="end",
+        )
+        svg.rect(
+            bar_x,
+            y - 17,
+            bar_width,
+            18,
+            fill="#0b1728",
+            stroke=_BORDER,
+            stroke_width=1,
+            radius=5,
+        )
+        svg.rect(
+            bar_x,
+            y - 17,
+            max(2, bar_width * artifact.byte_length // maximum_bytes),
+            18,
+            fill=color,
+            stroke=color,
+            stroke_width=1,
+            radius=5,
+        )
+
+    receipt_root = _string_value(payload["receipt_root"], label="candidate receipt root")
+    svg.rect(60, 1090, 1480, 55, fill="#211c37", stroke=_PURPLE, radius=12)
+    svg.text(88, 1125, f"receipt_root: {receipt_root}", size=15, color=_MUTED)
+    svg.footer(
+        "validated receipt files[] · exact byte_length and mode fields",
+        "inventory is an integrity record, not a signature or proof of independent provenance",
+    )
+    return Visual(
+        filename="candidate-artifact-inventory.svg",
+        title=title,
+        description=description,
+        source_modules=(release_module,),
+        source_files=(CANDIDATE_RECEIPT_PATH, CANDIDATE_EVIDENCE_TOOL_PATH),
+        nonclaims=(
+            "File digests and sizes do not independently authenticate the candidate.",
+            "The receipt lives outside the release and artifact-tree roots.",
+            "The development candidate is not an official release.",
+        ),
+        facts={
+            "file_count": len(artifacts),
+            "files": [
+                {
+                    "byte_length": artifact.byte_length,
+                    "content_digest": artifact.content_digest,
+                    "mode": f"{artifact.mode:04o}",
+                    "path": artifact.path,
+                }
+                for artifact in artifacts
+            ],
+            "manifest_bytes": manifest_bytes,
+            "payload_bytes": payload_bytes,
+            "total_bytes": total_bytes,
+        },
+        svg=svg.render(),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class SetupSnapshot:
+    """Exact setup and current-CI facts derived from committed configuration."""
+
+    python_version: str
+    requires_python: str
+    build_requirement: str
+    locked_packages: tuple[str, ...]
+    lock_hash_count: int
+    console_script: str
+    console_entrypoint: str
+    ci_install_commands: tuple[str, ...]
+    ci_check_commands: tuple[str, ...]
+    missing_ci_commands: tuple[str, ...]
+
+
+def _locked_requirements() -> tuple[tuple[str, ...], int]:
+    lines = _source_path(DEVELOPMENT_LOCK_PATH).read_text(encoding="utf-8").splitlines()
+    packages: list[str] = []
+    hash_count = 0
+    pending_package = False
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("--hash=sha256:"):
+            digest = stripped.removeprefix("--hash=sha256:")
+            if not pending_package or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+                raise RuntimeError("development lock contains an unbound or invalid hash")
+            hash_count += 1
+            pending_package = False
+            continue
+        if "==" not in stripped or not stripped.endswith("\\") or pending_package:
+            raise RuntimeError("development lock does not match the reviewed pinned form")
+        requirement = stripped.removesuffix("\\").strip()
+        name, version = requirement.split("==", maxsplit=1)
+        if not name or not version:
+            raise RuntimeError("development lock contains an invalid exact requirement")
+        packages.append(requirement)
+        pending_package = True
+    if pending_package or not packages or hash_count != len(packages):
+        raise RuntimeError("every locked package must have exactly one recorded wheel hash")
+    return tuple(packages), hash_count
+
+
+@lru_cache(maxsize=1)
+def _setup_snapshot() -> SetupSnapshot:
+    python_version = _source_path(PYTHON_VERSION_PATH).read_text(encoding="utf-8").strip()
+    pyproject_raw: object = tomllib.loads(_source_path(PYPROJECT_PATH).read_text(encoding="utf-8"))
+    pyproject = _object_value(pyproject_raw, label="pyproject")
+    build_system = _object_value(pyproject.get("build-system"), label="pyproject build-system")
+    project = _object_value(pyproject.get("project"), label="pyproject project")
+    scripts = _object_value(project.get("scripts"), label="pyproject scripts")
+    build_requirements = _array_value(
+        build_system.get("requires"), label="pyproject build requirements"
+    )
+    if len(build_requirements) != 1:
+        raise RuntimeError("pyproject build requirement set changed")
+    build_requirement = _string_value(build_requirements[0], label="pyproject build requirement")
+    requires_python = _string_value(
+        project.get("requires-python"), label="pyproject requires-python"
+    )
+    console_entrypoint = _string_value(
+        scripts.get("witnessgap"), label="pyproject witnessgap console entrypoint"
+    )
+    locked_packages, lock_hash_count = _locked_requirements()
+
+    ci_source = _source_path(CI_WORKFLOW_PATH).read_text(encoding="utf-8")
+    install_commands = (
+        "python -m pip install --require-hashes -r requirements-dev.lock",
+        "python -m pip install --no-deps --no-build-isolation --editable .",
+    )
+    check_commands = (
+        "ruff check src test",
+        "mypy --strict src test",
+        "pytest",
+    )
+    missing_commands = (
+        "ruff check tools",
+        "mypy --strict tools",
+        "python tools/workspace100_candidate_evidence.py check",
+        "python tools/render_readme_visuals.py check",
+        "witnessgap example  # explicit CLI smoke",
+    )
+    required_ci_fragments = (
+        "runs-on: ubuntu-24.04",
+        "architecture: x64",
+        "python-version-file: .python-version",
+        *install_commands,
+        *check_commands,
+    )
+    if (
+        python_version != "3.12.3"
+        or requires_python != ">=3.12"
+        or build_requirement != "hatchling==1.27.0"
+        or console_entrypoint != "witnessgap.cli:main"
+        or any(fragment not in ci_source for fragment in required_ci_fragments)
+        or any(command in ci_source for command in missing_commands)
+    ):
+        raise RuntimeError("reproducible setup or current CI command coverage changed")
+    return SetupSnapshot(
+        python_version=python_version,
+        requires_python=requires_python,
+        build_requirement=build_requirement,
+        locked_packages=locked_packages,
+        lock_hash_count=lock_hash_count,
+        console_script="witnessgap",
+        console_entrypoint=console_entrypoint,
+        ci_install_commands=install_commands,
+        ci_check_commands=check_commands,
+        missing_ci_commands=missing_commands,
+    )
+
+
+def _render_verification_flow() -> Visual:
+    setup = _setup_snapshot()
+    title = "Reproducible setup and current verification coverage"
+    description = (
+        "A source-derived setup flow from the pinned Python version, exact hashed development "
+        "lock, package metadata, and current GitHub Actions workflow. The workflow installs "
+        "the editable package and runs lint, strict typing, and tests. A separate red panel "
+        "lists evidence, visual, tools, and explicit CLI checks that are not currently in CI."
+    )
+    svg = Svg(1600, 1160, title=title, description=description)
+    svg.header(
+        "WitnessGap / committed setup contract",
+        "Pinned runtime → hashed install → editable CLI → current CI",
+        "Green/blue stages are configured today; the red panel records current CI omissions.",
+    )
+
+    cards = (
+        (
+            "01 · RUNTIME",
+            (
+                f".python-version = {setup.python_version}",
+                f"requires-python = {setup.requires_python}",
+                "CI: Ubuntu 24.04 · x64",
+            ),
+            _BLUE,
+        ),
+        (
+            "02 · HASHED TOOLCHAIN",
+            (
+                f"{len(setup.locked_packages)} exact packages",
+                f"{setup.lock_hash_count} SHA-256 wheel hashes",
+                setup.build_requirement,
+            ),
+            _ACCENT,
+        ),
+        (
+            "03 · EDITABLE PACKAGE",
+            (
+                "--no-deps",
+                "--no-build-isolation",
+                f"{setup.console_script} → {setup.console_entrypoint}",
+            ),
+            _PURPLE,
+        ),
+        (
+            "04 · CURRENT CI",
+            (
+                "lint: src + test",
+                "strict types: src + test",
+                "pytest: configured test suite",
+            ),
+            _GREEN,
+        ),
+    )
+    for index, (heading, lines, color) in enumerate(cards):
+        x = 60 + index * 380
+        svg.rect(x, 180, 340, 240, fill=_PANEL, stroke=color)
+        svg.text(x + 24, 219, heading, size=13, color=color, weight=700, letter_spacing=1)
+        svg.multiline(
+            x + 24,
+            270,
+            lines,
+            size=15,
+            color=_TEXT,
+            weight=700,
+            line_height=42,
+        )
+        if index < len(cards) - 1:
+            svg.arrow(x + 340, 300, x + 380, 300, color=_ACCENT)
+
+    svg.rect(60, 470, 720, 460, fill="#0e2630", stroke=_GREEN)
+    svg.text(88, 510, "CURRENT CI · EXACT COMMANDS", size=14, color=_GREEN, weight=700)
+    svg.text(88, 552, "HASH-LOCKED INSTALL", size=12, color=_ACCENT, weight=700)
+    svg.multiline(
+        88,
+        584,
+        setup.ci_install_commands,
+        size=14,
+        color=_TEXT,
+        line_height=31,
+    )
+    svg.text(88, 680, "QUALITY CHECKS", size=12, color=_ACCENT, weight=700)
+    svg.multiline(
+        88,
+        714,
+        setup.ci_check_commands,
+        size=17,
+        color=_TEXT,
+        weight=700,
+        line_height=42,
+    )
+    svg.multiline(
+        88,
+        862,
+        (
+            "CI source scope is literal: src + test.",
+            "pytest discovers test/ from pyproject.toml.",
+        ),
+        size=14,
+        color=_MUTED,
+        line_height=27,
+    )
+
+    svg.rect(820, 470, 720, 460, fill="#2b1d28", stroke=_RED)
+    svg.text(848, 510, "NOT IN CURRENT CI · EXPLICIT OMISSIONS", size=14, color=_RED, weight=700)
+    svg.multiline(
+        848,
+        558,
+        (
+            "tools/ is absent from explicit Ruff scope",
+            "tools/ is absent from explicit mypy scope",
+            "candidate evidence check is not invoked",
+            "README visual freshness check is not invoked",
+            "console-script smoke command is not invoked",
+        ),
+        size=16,
+        color="#ffd7db",
+        line_height=43,
+    )
+    svg.text(848, 795, "REPRODUCIBLE LOCAL COMMANDS", size=12, color=_GOLD, weight=700)
+    svg.multiline(
+        848,
+        830,
+        (
+            "python tools/workspace100_candidate_evidence.py check",
+            "python tools/render_readme_visuals.py check",
+        ),
+        size=13,
+        color=_TEXT,
+        line_height=33,
+    )
+    svg.rect(60, 960, 1480, 70, fill=_PANEL, stroke=_BORDER, radius=12)
+    svg.text(
+        88,
+        1004,
+        (
+            f"lock coverage: {len(setup.locked_packages)} package pins / "
+            f"{setup.lock_hash_count} hashes  ·  console script: "
+            f"{setup.console_script} = {setup.console_entrypoint}"
+        ),
+        size=16,
+        color=_MUTED,
+    )
+    svg.footer(
+        ".python-version · requirements-dev.lock · pyproject.toml · ci.yml",
+        "diagram distinguishes configured CI from reproducible checks not yet wired into CI",
+    )
+    return Visual(
+        filename="verification-flow.svg",
+        title=title,
+        description=description,
+        source_modules=(),
+        source_files=(
+            PYTHON_VERSION_PATH,
+            DEVELOPMENT_LOCK_PATH,
+            PYPROJECT_PATH,
+            CI_WORKFLOW_PATH,
+        ),
+        nonclaims=(
+            "Candidate evidence and README visual checks are not currently CI gates.",
+            "The current explicit lint and type-check scopes omit tools/.",
+            "The current CI has no explicit installed-console-script smoke command.",
+        ),
+        facts={
+            "build_requirement": setup.build_requirement,
+            "ci_check_commands": list(setup.ci_check_commands),
+            "ci_install_commands": list(setup.ci_install_commands),
+            "console_entrypoint": setup.console_entrypoint,
+            "console_script": setup.console_script,
+            "locked_package_count": len(setup.locked_packages),
+            "locked_packages": list(setup.locked_packages),
+            "lock_hash_count": setup.lock_hash_count,
+            "missing_ci_commands": list(setup.missing_ci_commands),
+            "python_version": setup.python_version,
+            "requires_python": setup.requires_python,
+        },
+        svg=svg.render(),
+    )
+
+
 def _visuals() -> tuple[Visual, ...]:
     return (
         _render_causal_twins(),
@@ -1586,6 +2490,10 @@ def _visuals() -> tuple[Visual, ...]:
         _render_release_tree(),
         _render_release_bindings(),
         _render_isolation_boundary(),
+        _render_candidate_control_results(),
+        _render_candidate_check_transcript(),
+        _render_candidate_artifact_inventory(),
+        _render_verification_flow(),
     )
 
 
@@ -1622,26 +2530,32 @@ def _validate_svg(payload: bytes, *, filename: str) -> None:
         raise RuntimeError(f"{filename}: visible nonclaim marker is missing")
 
 
+def _visual_source_paths(visual: Visual) -> tuple[Path, ...]:
+    sources = {
+        *(_module_path(module) for module in visual.source_modules),
+        *(_source_path(path) for path in visual.source_files),
+    }
+    return tuple(sorted(sources, key=_relative_source_path))
+
+
+def _source_record(path: Path) -> dict[str, str]:
+    resolved = _source_path(path)
+    return {
+        "path": _relative_source_path(resolved),
+        "sha256": _sha256(resolved.read_bytes()),
+    }
+
+
 def _source_records(visuals: tuple[Visual, ...]) -> list[dict[str, str]]:
-    modules = {module.__name__: module for visual in visuals for module in visual.source_modules}
-    modules["tools.render_readme_visuals"] = sys.modules[__name__]
-    records = [
-        {
-            "path": _relative_module_path(module),
-            "sha256": _sha256(_module_path(module).read_bytes()),
-        }
-        for module in modules.values()
-    ]
-    return sorted(records, key=lambda record: record["path"])
+    sources = {
+        _module_path(sys.modules[__name__]),
+        *(path for visual in visuals for path in _visual_source_paths(visual)),
+    }
+    return [_source_record(path) for path in sorted(sources, key=_relative_source_path)]
 
 
 def _manifest(visuals: tuple[Visual, ...]) -> bytes:
     source_records = _source_records(visuals)
-    source_by_module = {
-        module.__name__: _relative_module_path(module)
-        for visual in visuals
-        for module in visual.source_modules
-    }
     payload = {
         "format": _FORMAT,
         "generator": "tools/render_readme_visuals.py",
@@ -1656,9 +2570,10 @@ def _manifest(visuals: tuple[Visual, ...]) -> bytes:
                 "nonclaims": list(visual.nonclaims),
                 "official": False,
                 "sha256": _sha256(visual.svg),
-                "source_paths": sorted(
-                    source_by_module[module.__name__] for module in visual.source_modules
-                ),
+                "source_paths": [
+                    _relative_source_path(path) for path in _visual_source_paths(visual)
+                ],
+                "source_records": [_source_record(path) for path in _visual_source_paths(visual)],
                 "title": visual.title,
             }
             for visual in visuals

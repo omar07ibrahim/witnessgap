@@ -5,6 +5,26 @@
   "renderer_version": 1,
   "sources": [
     {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "b443304c71d25985a1446fc5a5c3841638d41615cd6662f0b96d7cd12e2c08e5"
+    },
+    {
+      "path": ".python-version",
+      "sha256": "fa682ae9d943f5c8076e68335c9ba3ab4d063ad035c07ac6928653dd4ac50af7"
+    },
+    {
+      "path": "docs/evidence/workspace100-candidate-receipt.json",
+      "sha256": "d68524fe4051ebfee4a2023d0eae820c897c032b930d25bacfd374e1cecd01dd"
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "334bf6886ef4a5f7ca8eb0aa6fb6b2dec239308d4a9997bc2966acd967c0f530"
+    },
+    {
+      "path": "requirements-dev.lock",
+      "sha256": "803221feb50ae365cb12301de1338bee415f6af96b886baefbb14085a511e917"
+    },
+    {
       "path": "src/witnessgap/identifiability.py",
       "sha256": "68efac15163a52a6cc842ca79d4f75c60ec5a2ee50b6c0bbcfe6393e29bb2640"
     },
@@ -54,7 +74,11 @@
     },
     {
       "path": "tools/render_readme_visuals.py",
-      "sha256": "fbd59f1ec2dbbbe6c58fb2a84f05e1483cdceff02545f369dd5f6a5116c0aa22"
+      "sha256": "e70d3696ef81ea3c1686b9adea0fbc8074cd338bb53ebd68580c3afd78256af3"
+    },
+    {
+      "path": "tools/workspace100_candidate_evidence.py",
+      "sha256": "5b1c3ac62f77d39796aed129b4e38fcbff0a7763b6626cbeb07564fdc4630403"
     }
   ],
   "visuals": [
@@ -95,6 +119,24 @@
         "src/witnessgap/verifier.py",
         "src/witnessgap/worlds/workspace.py"
       ],
+      "source_records": [
+        {
+          "path": "src/witnessgap/identifiability.py",
+          "sha256": "68efac15163a52a6cc842ca79d4f75c60ec5a2ee50b6c0bbcfe6393e29bb2640"
+        },
+        {
+          "path": "src/witnessgap/oracle.py",
+          "sha256": "424f5ae19462fe4a3c820679917994a06224c38ae8797a801926cbe7b96e207e"
+        },
+        {
+          "path": "src/witnessgap/verifier.py",
+          "sha256": "eded83e8adddef8c3c3a09badce7c757f54fc5b08336a6929b1b0e072ede24f1"
+        },
+        {
+          "path": "src/witnessgap/worlds/workspace.py",
+          "sha256": "ed0717afa26a22c5bfec15791388396b6e4518409eee70b2c9012c29709bb922"
+        }
+      ],
       "title": "Causal twins: identical evidence, incompatible repairs"
     },
     {
@@ -122,6 +164,16 @@
       "source_paths": [
         "src/witnessgap/identifiability.py",
         "src/witnessgap/workspace100/evidence.py"
+      ],
+      "source_records": [
+        {
+          "path": "src/witnessgap/identifiability.py",
+          "sha256": "68efac15163a52a6cc842ca79d4f75c60ec5a2ee50b6c0bbcfe6393e29bb2640"
+        },
+        {
+          "path": "src/witnessgap/workspace100/evidence.py",
+          "sha256": "b2d2d1c42dcaeb1f1d5ee4e0c182d51de34a0677a5f6876277a9ae92fe73dcda"
+        }
       ],
       "title": "WitnessGap verdict taxonomy"
     },
@@ -224,6 +276,24 @@
         "src/witnessgap/workspace100/generation.py",
         "src/witnessgap/workspace100/views.py"
       ],
+      "source_records": [
+        {
+          "path": "src/witnessgap/workspace100/baselines.py",
+          "sha256": "77ac72d5e4614d9c83fd4b0f38739245453ab1d7c6d4f39c549123de6f3bd69d"
+        },
+        {
+          "path": "src/witnessgap/workspace100/catalog.py",
+          "sha256": "38bfa6a2ce1ab828d10b1d527fa8640139566feb5e8d7e2759c7e77395f054e2"
+        },
+        {
+          "path": "src/witnessgap/workspace100/generation.py",
+          "sha256": "dc92b11254537ced17368feb277775d9a4b3a2676d452c7b3102c66d00029890"
+        },
+        {
+          "path": "src/witnessgap/workspace100/views.py",
+          "sha256": "db2b424ec95024d384185404485511b7303b216ea88432fc990dc437b7539b6f"
+        }
+      ],
       "title": "Workspace-100 construction funnel"
     },
     {
@@ -309,6 +379,20 @@
         "src/witnessgap/workspace100/generation.py",
         "src/witnessgap/workspace100/views.py"
       ],
+      "source_records": [
+        {
+          "path": "src/witnessgap/workspace100/evidence.py",
+          "sha256": "b2d2d1c42dcaeb1f1d5ee4e0c182d51de34a0677a5f6876277a9ae92fe73dcda"
+        },
+        {
+          "path": "src/witnessgap/workspace100/generation.py",
+          "sha256": "dc92b11254537ced17368feb277775d9a4b3a2676d452c7b3102c66d00029890"
+        },
+        {
+          "path": "src/witnessgap/workspace100/views.py",
+          "sha256": "db2b424ec95024d384185404485511b7303b216ea88432fc990dc437b7539b6f"
+        }
+      ],
       "title": "Workspace-100 participant evidence views"
     },
     {
@@ -349,6 +433,16 @@
       "source_paths": [
         "src/witnessgap/workspace100/release.py",
         "src/witnessgap/workspace100/release_io.py"
+      ],
+      "source_records": [
+        {
+          "path": "src/witnessgap/workspace100/release.py",
+          "sha256": "6d4edb0347ae8ee4dbaa937ba095b7f1e8652b60e797fe10bb5c61d4255613ac"
+        },
+        {
+          "path": "src/witnessgap/workspace100/release_io.py",
+          "sha256": "8cd578ba60793fbafc4d4c2ad6c4a3bd7308bb86c8734a606c6272b9737c2d96"
+        }
       ],
       "title": "Workspace-100 pre-release candidate tree"
     },
@@ -436,6 +530,12 @@
       "source_paths": [
         "src/witnessgap/workspace100/release.py"
       ],
+      "source_records": [
+        {
+          "path": "src/witnessgap/workspace100/release.py",
+          "sha256": "6d4edb0347ae8ee4dbaa937ba095b7f1e8652b60e797fe10bb5c61d4255613ac"
+        }
+      ],
       "title": "Workspace-100 release binding closure"
     },
     {
@@ -495,7 +595,366 @@
         "src/witnessgap/workspace100/release.py",
         "src/witnessgap/workspace100/worker.py"
       ],
+      "source_records": [
+        {
+          "path": "src/witnessgap/workspace100/release.py",
+          "sha256": "6d4edb0347ae8ee4dbaa937ba095b7f1e8652b60e797fe10bb5c61d4255613ac"
+        },
+        {
+          "path": "src/witnessgap/workspace100/worker.py",
+          "sha256": "852dd9a6d8a56fe6df5322495e6c173c740ee627b1dc6ad712fc9cd5bef12ba0"
+        }
+      ],
       "title": "Workspace-100 worker lifecycle boundary"
+    },
+    {
+      "description": "Grouped horizontal bars show exact decisive-coverage and false-certainty-incidence rates for four frozen rule-based controls in the validated development candidate. The controls are descriptive protocol checks, not competitive systems. All 1,200 worker runs produced claims and zero worker failures.",
+      "facts": {
+        "controls": [
+          {
+            "baseline": "always_unknown",
+            "decisive_coverage": {
+              "denominator": 300,
+              "numerator": 0,
+              "ratio": {
+                "denominator": 1,
+                "numerator": 0
+              }
+            },
+            "false_certainty_incidence": {
+              "denominator": 300,
+              "numerator": 0,
+              "ratio": {
+                "denominator": 1,
+                "numerator": 0
+              }
+            }
+          },
+          {
+            "baseline": "forced_environment",
+            "decisive_coverage": {
+              "denominator": 300,
+              "numerator": 300,
+              "ratio": {
+                "denominator": 1,
+                "numerator": 1
+              }
+            },
+            "false_certainty_incidence": {
+              "denominator": 300,
+              "numerator": 200,
+              "ratio": {
+                "denominator": 3,
+                "numerator": 2
+              }
+            }
+          },
+          {
+            "baseline": "refresh_success_only",
+            "decisive_coverage": {
+              "denominator": 300,
+              "numerator": 50,
+              "ratio": {
+                "denominator": 6,
+                "numerator": 1
+              }
+            },
+            "false_certainty_incidence": {
+              "denominator": 300,
+              "numerator": 0,
+              "ratio": {
+                "denominator": 1,
+                "numerator": 0
+              }
+            }
+          },
+          {
+            "baseline": "refresh_outcome",
+            "decisive_coverage": {
+              "denominator": 300,
+              "numerator": 100,
+              "ratio": {
+                "denominator": 3,
+                "numerator": 1
+              }
+            },
+            "false_certainty_incidence": {
+              "denominator": 300,
+              "numerator": 0,
+              "ratio": {
+                "denominator": 1,
+                "numerator": 0
+              }
+            }
+          }
+        ],
+        "receipt_root": "668d2093bef503c0c43300f586427124863d59fc5b75d223d2396fb28da6f313",
+        "worker_runs": 1200,
+        "worker_status": {
+          "claimed": 1200,
+          "failed": 0
+        }
+      },
+      "file": "candidate-control-results.svg",
+      "nonclaims": [
+        "The four built-ins are frozen rule-based controls, not competitive systems.",
+        "The receipt is a non-official development candidate.",
+        "The receipt does not independently authenticate its release root."
+      ],
+      "official": false,
+      "sha256": "f0a8ea6d98ea6bc5ba71ed3f93ce4d9dc4aab6596f336101f4cfdb6b32d4ae78",
+      "source_paths": [
+        "docs/evidence/workspace100-candidate-receipt.json",
+        "tools/workspace100_candidate_evidence.py"
+      ],
+      "source_records": [
+        {
+          "path": "docs/evidence/workspace100-candidate-receipt.json",
+          "sha256": "d68524fe4051ebfee4a2023d0eae820c897c032b930d25bacfd374e1cecd01dd"
+        },
+        {
+          "path": "tools/workspace100_candidate_evidence.py",
+          "sha256": "5b1c3ac62f77d39796aed129b4e38fcbff0a7763b6626cbeb07564fdc4630403"
+        }
+      ],
+      "title": "Built-in control outcomes on the validated Workspace-100 candidate"
+    },
+    {
+      "description": "A reproducible command and its exact single-line deterministic standard output, followed by exact receipt fields. The command validates local drift pins and the committed candidate receipt; it explicitly does not establish independent authentication.",
+      "facts": {
+        "command": "python tools/workspace100_candidate_evidence.py check",
+        "official": false,
+        "receipt_root": "668d2093bef503c0c43300f586427124863d59fc5b75d223d2396fb28da6f313",
+        "release_kind": "pre_release_reproducibility_candidate",
+        "release_root": "005987000c049e34f1a5b1f886bb07bcd1d02d983c16ddfd098cde6e79c82d01",
+        "root_authentication": "not_established_by_this_receipt",
+        "stdout": "verified non-official development candidate receipt 668d2093bef503c0c43300f586427124863d59fc5b75d223d2396fb28da6f313; independent authentication: not established"
+      },
+      "file": "candidate-check-transcript.svg",
+      "nonclaims": [
+        "The transcript is not an independently authenticated attestation.",
+        "Pinned roots are local repository drift checks.",
+        "The development candidate is not an official Workspace-100 release."
+      ],
+      "official": false,
+      "sha256": "a4b713552f5277f2ac9f1e4679eaabd96de29f741b16fa0ba4bfe9d7f3da247a",
+      "source_paths": [
+        "docs/evidence/workspace100-candidate-receipt.json",
+        "tools/workspace100_candidate_evidence.py"
+      ],
+      "source_records": [
+        {
+          "path": "docs/evidence/workspace100-candidate-receipt.json",
+          "sha256": "d68524fe4051ebfee4a2023d0eae820c897c032b930d25bacfd374e1cecd01dd"
+        },
+        {
+          "path": "tools/workspace100_candidate_evidence.py",
+          "sha256": "5b1c3ac62f77d39796aed129b4e38fcbff0a7763b6626cbeb07564fdc4630403"
+        }
+      ],
+      "title": "Deterministic candidate-receipt verification transcript"
+    },
+    {
+      "description": "All fourteen file records from the validated candidate receipt in canonical order. Every row shows its release-relative path, exact mode, exact byte length, and a proportional size bar. The total is exactly 5,610,036 bytes.",
+      "facts": {
+        "file_count": 14,
+        "files": [
+          {
+            "byte_length": 2237,
+            "content_digest": "faf1fe256bb5da2570a0193f325271a8934013b8db566ad494fe65ef57255454",
+            "mode": "0444",
+            "path": "protocol.json"
+          },
+          {
+            "byte_length": 62388,
+            "content_digest": "8c35e6ca7b884c146166f9e8cb3fc5d4a3ec0379819c52e0414a6027bf224864",
+            "mode": "0444",
+            "path": "baselines/baseline-set.json"
+          },
+          {
+            "byte_length": 2926,
+            "content_digest": "cee49b549a2d6bea2addbce25b766e44aa9d3c3b76cf5a5766483edcf96015d8",
+            "mode": "0444",
+            "path": "authored/templates.json"
+          },
+          {
+            "byte_length": 27504,
+            "content_digest": "67d1385f29d574e5909023c788d7d7356127afb847cf3fb53884f8726243342f",
+            "mode": "0444",
+            "path": "authored/variants.json"
+          },
+          {
+            "byte_length": 804,
+            "content_digest": "12fb9d07d3f54ce34e45151eb93920e16dc88e22d81f7705af4419d2b08bc7f5",
+            "mode": "0444",
+            "path": "sealed/generation.json"
+          },
+          {
+            "byte_length": 278820,
+            "content_digest": "38605ca45f2ad30958f9c6467d268b73a8fba8f57524e29347b0163155475ea6",
+            "mode": "0444",
+            "path": "sealed/sources.jsonl"
+          },
+          {
+            "byte_length": 69290,
+            "content_digest": "7883d9706da5dfaf0f670c78e77c32c7e4296aeea4f9ed3b5ac9139ccf5180f0",
+            "mode": "0444",
+            "path": "registries.jsonl"
+          },
+          {
+            "byte_length": 16850,
+            "content_digest": "f4d2c1f7c383b0cae336b24a17880868e0df2ff6a41e9decf2861f5b8948d706",
+            "mode": "0444",
+            "path": "verified/trust-anchors.jsonl"
+          },
+          {
+            "byte_length": 1097240,
+            "content_digest": "43b8707333e16da3a7ebdca42f943c390e405ef456849e03e1a127a8910ba105",
+            "mode": "0444",
+            "path": "verified/panels.jsonl"
+          },
+          {
+            "byte_length": 600192,
+            "content_digest": "689ebce55988ca814c2fd6bb3686f6fda73fbec50b53ad0dc476cc68f7b155ad",
+            "mode": "0444",
+            "path": "public/views.jsonl"
+          },
+          {
+            "byte_length": 1220406,
+            "content_digest": "3ba8a02f95bfabc407038934c1049e72e33ed604db0ace2b571e440eefed2446",
+            "mode": "0444",
+            "path": "truth/labels.jsonl"
+          },
+          {
+            "byte_length": 1234526,
+            "content_digest": "ae2799f069a18d701c4520d68647d0f28dd40def224d5c2a6b444fe60e79e38b",
+            "mode": "0444",
+            "path": "results/claims.json"
+          },
+          {
+            "byte_length": 988701,
+            "content_digest": "0cae599e59ae95acf428a0bda97d474e6499a063b3bb43fb04ed422425dc907d",
+            "mode": "0444",
+            "path": "results/report.json"
+          },
+          {
+            "byte_length": 8152,
+            "content_digest": "d7683537b8593ddbe4a9953ee722aad3d13fe1b2361a57349c686496f4c10dac",
+            "mode": "0444",
+            "path": "release-manifest.json"
+          }
+        ],
+        "manifest_bytes": 8152,
+        "payload_bytes": 5601884,
+        "total_bytes": 5610036
+      },
+      "file": "candidate-artifact-inventory.svg",
+      "nonclaims": [
+        "File digests and sizes do not independently authenticate the candidate.",
+        "The receipt lives outside the release and artifact-tree roots.",
+        "The development candidate is not an official release."
+      ],
+      "official": false,
+      "sha256": "813b6b0c3cd19940b1bb0d0a1ce694924bd5481ecac02ac5ea0d7ea49f688e05",
+      "source_paths": [
+        "docs/evidence/workspace100-candidate-receipt.json",
+        "src/witnessgap/workspace100/release.py",
+        "tools/workspace100_candidate_evidence.py"
+      ],
+      "source_records": [
+        {
+          "path": "docs/evidence/workspace100-candidate-receipt.json",
+          "sha256": "d68524fe4051ebfee4a2023d0eae820c897c032b930d25bacfd374e1cecd01dd"
+        },
+        {
+          "path": "src/witnessgap/workspace100/release.py",
+          "sha256": "6d4edb0347ae8ee4dbaa937ba095b7f1e8652b60e797fe10bb5c61d4255613ac"
+        },
+        {
+          "path": "tools/workspace100_candidate_evidence.py",
+          "sha256": "5b1c3ac62f77d39796aed129b4e38fcbff0a7763b6626cbeb07564fdc4630403"
+        }
+      ],
+      "title": "Workspace-100 candidate artifact inventory and exact sizes"
+    },
+    {
+      "description": "A source-derived setup flow from the pinned Python version, exact hashed development lock, package metadata, and current GitHub Actions workflow. The workflow installs the editable package and runs lint, strict typing, and tests. A separate red panel lists evidence, visual, tools, and explicit CLI checks that are not currently in CI.",
+      "facts": {
+        "build_requirement": "hatchling==1.27.0",
+        "ci_check_commands": [
+          "ruff check src test",
+          "mypy --strict src test",
+          "pytest"
+        ],
+        "ci_install_commands": [
+          "python -m pip install --require-hashes -r requirements-dev.lock",
+          "python -m pip install --no-deps --no-build-isolation --editable ."
+        ],
+        "console_entrypoint": "witnessgap.cli:main",
+        "console_script": "witnessgap",
+        "lock_hash_count": 16,
+        "locked_package_count": 16,
+        "locked_packages": [
+          "coverage==7.15.2",
+          "editables==0.6",
+          "hatchling==1.27.0",
+          "iniconfig==2.3.0",
+          "librt==0.13.0",
+          "mypy==1.20.2",
+          "mypy-extensions==1.1.0",
+          "packaging==26.2",
+          "pathspec==1.1.1",
+          "pluggy==1.6.0",
+          "pygments==2.20.0",
+          "pytest==8.4.2",
+          "pytest-cov==7.1.0",
+          "ruff==0.16.0",
+          "trove-classifiers==2026.6.1.19",
+          "typing-extensions==4.16.0"
+        ],
+        "missing_ci_commands": [
+          "ruff check tools",
+          "mypy --strict tools",
+          "python tools/workspace100_candidate_evidence.py check",
+          "python tools/render_readme_visuals.py check",
+          "witnessgap example  # explicit CLI smoke"
+        ],
+        "python_version": "3.12.3",
+        "requires_python": ">=3.12"
+      },
+      "file": "verification-flow.svg",
+      "nonclaims": [
+        "Candidate evidence and README visual checks are not currently CI gates.",
+        "The current explicit lint and type-check scopes omit tools/.",
+        "The current CI has no explicit installed-console-script smoke command."
+      ],
+      "official": false,
+      "sha256": "4457c522bcdba84970fcdf87e39b985e7d7345198c5f65d48a113a9a700745a3",
+      "source_paths": [
+        ".github/workflows/ci.yml",
+        ".python-version",
+        "pyproject.toml",
+        "requirements-dev.lock"
+      ],
+      "source_records": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "sha256": "b443304c71d25985a1446fc5a5c3841638d41615cd6662f0b96d7cd12e2c08e5"
+        },
+        {
+          "path": ".python-version",
+          "sha256": "fa682ae9d943f5c8076e68335c9ba3ab4d063ad035c07ac6928653dd4ac50af7"
+        },
+        {
+          "path": "pyproject.toml",
+          "sha256": "334bf6886ef4a5f7ca8eb0aa6fb6b2dec239308d4a9997bc2966acd967c0f530"
+        },
+        {
+          "path": "requirements-dev.lock",
+          "sha256": "803221feb50ae365cb12301de1338bee415f6af96b886baefbb14085a511e917"
+        }
+      ],
+      "title": "Reproducible setup and current verification coverage"
     }
   ]
 }

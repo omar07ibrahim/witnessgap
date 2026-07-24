@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1240" viewBox="0 0 1600 1240" role="img" aria-labelledby="visual-title visual-description">
+  <title id="visual-title">Workspace-100 candidate artifact inventory and exact sizes</title>
+  <desc id="visual-description">All fourteen file records from the validated candidate receipt in canonical order. Every row shows its release-relative path, exact mode, exact byte length, and a proportional size bar. The total is exactly 5,610,036 bytes.</desc>
+  <rect x="0" y="0" width="1600" height="1240" fill="#08111f"/>
+  <text x="60" y="52" fill="#58d6c9" font-family="monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="2">WORKSPACE-100 / RECEIPT-BOUND ARTIFACT TREE</text>
+  <text x="60" y="98" fill="#f4f7fb" font-family="monospace" font-size="34" font-weight="700" text-anchor="start" letter-spacing="0">All 14 materialized files and exact byte lengths</text>
+  <text x="60" y="132" fill="#afc2d8" font-family="monospace" font-size="18" font-weight="400" text-anchor="start" letter-spacing="0">13 payloads + release-manifest.json; order and sizes come from the validated receipt.</text>
+  <rect x="60" y="170" width="1480" height="112" rx="18" fill="#0e2630" stroke="#58d6c9" stroke-width="2"/>
+  <text x="88" y="208" fill="#58d6c9" font-family="monospace" font-size="12" font-weight="700" text-anchor="start" letter-spacing="1">TREE TOTAL</text>
+  <text x="88" y="250" fill="#f4f7fb" font-family="monospace" font-size="22" font-weight="700" text-anchor="start" letter-spacing="0">5,610,036 bytes</text>
+  <text x="453" y="208" fill="#6eb7ff" font-family="monospace" font-size="12" font-weight="700" text-anchor="start" letter-spacing="1">13 PAYLOADS</text>
+  <text x="453" y="250" fill="#f4f7fb" font-family="monospace" font-size="22" font-weight="700" text-anchor="start" letter-spacing="0">5,601,884 bytes</text>
+  <text x="818" y="208" fill="#b8a1ff" font-family="monospace" font-size="12" font-weight="700" text-anchor="start" letter-spacing="1">MANIFEST</text>
+  <text x="818" y="250" fill="#f4f7fb" font-family="monospace" font-size="22" font-weight="700" text-anchor="start" letter-spacing="0">8,152 bytes</text>
+  <text x="1183" y="208" fill="#ffd166" font-family="monospace" font-size="12" font-weight="700" text-anchor="start" letter-spacing="1">FILE MODE</text>
+  <text x="1183" y="250" fill="#f4f7fb" font-family="monospace" font-size="22" font-weight="700" text-anchor="start" letter-spacing="0">0444</text>
+  <rect x="60" y="315" width="1480" height="750" rx="12" fill="#111f33" stroke="#2d4665" stroke-width="2"/>
+  <text x="86" y="352" fill="#afc2d8" font-family="monospace" font-size="13" font-weight="700" text-anchor="start" letter-spacing="0">#</text>
+  <text x="130" y="352" fill="#afc2d8" font-family="monospace" font-size="13" font-weight="700" text-anchor="start" letter-spacing="0">RELEASE-RELATIVE PATH</text>
+  <text x="790" y="352" fill="#afc2d8" font-family="monospace" font-size="13" font-weight="700" text-anchor="start" letter-spacing="0">MODE</text>
+  <text x="960" y="352" fill="#afc2d8" font-family="monospace" font-size="13" font-weight="700" text-anchor="end" letter-spacing="0">EXACT BYTES</text>
+  <text x="1010" y="352" fill="#afc2d8" font-family="monospace" font-size="13" font-weight="700" text-anchor="start" letter-spacing="0">RELATIVE SIZE</text>
+  <line x1="84" y1="370" x2="1516" y2="370" stroke="#2d4665" stroke-width="2" stroke-linecap="round"/>
+  <text x="86" y="408" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">01</text>
+  <text x="130" y="408" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">protocol.json</text>
+  <text x="790" y="408" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">0444</text>
+  <text x="960" y="408" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="end" letter-spacing="0">2,237</text>
+  <rect x="1010" y="391" width="455" height="18" rx="5" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <rect x="1010" y="391" width="2" height="18" rx="5" fill="#6eb7ff" stroke="#6eb7ff" stroke-width="1"/>
+  <rect x="78" y="427" width="1444" height="39" rx="4" fill="#0d1a2c" stroke="#0d1a2c" stroke-width="2"/>
+  <text x="86" y="454" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">02</text>
+  <text x="130" y="454" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">baselines/baseline-set.json</text>
+  <text x="790" y="454" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">0444</text>
+  <text x="960" y="454" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="end" letter-spacing="0">62,388</text>
+  <rect x="1010" y="437" width="455" height="18" rx="5" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <rect x="1010" y="437" width="22" height="18" rx="5" fill="#6eb7ff" stroke="#6eb7ff" stroke-width="1"/>
+  <text x="86" y="500" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">03</text>
+  <text x="130" y="500" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">authored/templates.json</text>
+  <text x="790" y="500" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">0444</text>
+  <text x="960" y="500" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="end" letter-spacing="0">2,926</text>
+  <rect x="1010" y="483" width="455" height="18" rx="5" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <rect x="1010" y="483" width="2" height="18" rx="5" fill="#6eb7ff" stroke="#6eb7ff" stroke-width="1"/>
+  <rect x="78" y="519" width="1444" height="39" rx="4" fill="#0d1a2c" stroke="#0d1a2c" stroke-width="2"/>
+  <text x="86" y="546" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">04</text>
+  <text x="130" y="546" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">authored/variants.json</text>
+  <text x="790" y="546" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">0444</text>
+  <text x="960" y="546" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="end" letter-spacing="0">27,504</text>
+  <rect x="1010" y="529" width="455" height="18" rx="5" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <rect x="1010" y="529" width="10" height="18" rx="5" fill="#6eb7ff" stroke="#6eb7ff" stroke-width="1"/>
+  <text x="86" y="592" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">05</text>
+  <text x="130" y="592" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">sealed/generation.json</text>
+  <text x="790" y="592" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">0444</text>
+  <text x="960" y="592" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="end" letter-spacing="0">804</text>
+  <rect x="1010" y="575" width="455" height="18" rx="5" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <rect x="1010" y="575" width="2" height="18" rx="5" fill="#6eb7ff" stroke="#6eb7ff" stroke-width="1"/>
+  <rect x="78" y="611" width="1444" height="39" rx="4" fill="#0d1a2c" stroke="#0d1a2c" stroke-width="2"/>
+  <text x="86" y="638" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">06</text>
+  <text x="130" y="638" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">sealed/sources.jsonl</text>
+  <text x="790" y="638" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">0444</text>
+  <text x="960" y="638" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="end" letter-spacing="0">278,820</text>
+  <rect x="1010" y="621" width="455" height="18" rx="5" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <rect x="1010" y="621" width="102" height="18" rx="5" fill="#6eb7ff" stroke="#6eb7ff" stroke-width="1"/>
+  <text x="86" y="684" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">07</text>
+  <text x="130" y="684" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">registries.jsonl</text>
+  <text x="790" y="684" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">0444</text>
+  <text x="960" y="684" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="end" letter-spacing="0">69,290</text>
+  <rect x="1010" y="667" width="455" height="18" rx="5" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <rect x="1010" y="667" width="25" height="18" rx="5" fill="#6eb7ff" stroke="#6eb7ff" stroke-width="1"/>
+  <rect x="78" y="703" width="1444" height="39" rx="4" fill="#0d1a2c" stroke="#0d1a2c" stroke-width="2"/>
+  <text x="86" y="730" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">08</text>
+  <text x="130" y="730" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">verified/trust-anchors.jsonl</text>
+  <text x="790" y="730" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">0444</text>
+  <text x="960" y="730" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="end" letter-spacing="0">16,850</text>
+  <rect x="1010" y="713" width="455" height="18" rx="5" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <rect x="1010" y="713" width="6" height="18" rx="5" fill="#6eb7ff" stroke="#6eb7ff" stroke-width="1"/>
+  <text x="86" y="776" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">09</text>
+  <text x="130" y="776" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">verified/panels.jsonl</text>
+  <text x="790" y="776" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">0444</text>
+  <text x="960" y="776" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="end" letter-spacing="0">1,097,240</text>
+  <rect x="1010" y="759" width="455" height="18" rx="5" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <rect x="1010" y="759" width="404" height="18" rx="5" fill="#6eb7ff" stroke="#6eb7ff" stroke-width="1"/>
+  <rect x="78" y="795" width="1444" height="39" rx="4" fill="#0d1a2c" stroke="#0d1a2c" stroke-width="2"/>
+  <text x="86" y="822" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">10</text>
+  <text x="130" y="822" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">public/views.jsonl</text>
+  <text x="790" y="822" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">0444</text>
+  <text x="960" y="822" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="end" letter-spacing="0">600,192</text>
+  <rect x="1010" y="805" width="455" height="18" rx="5" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <rect x="1010" y="805" width="221" height="18" rx="5" fill="#6eb7ff" stroke="#6eb7ff" stroke-width="1"/>
+  <text x="86" y="868" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">11</text>
+  <text x="130" y="868" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">truth/labels.jsonl</text>
+  <text x="790" y="868" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">0444</text>
+  <text x="960" y="868" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="end" letter-spacing="0">1,220,406</text>
+  <rect x="1010" y="851" width="455" height="18" rx="5" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <rect x="1010" y="851" width="449" height="18" rx="5" fill="#6eb7ff" stroke="#6eb7ff" stroke-width="1"/>
+  <rect x="78" y="887" width="1444" height="39" rx="4" fill="#0d1a2c" stroke="#0d1a2c" stroke-width="2"/>
+  <text x="86" y="914" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">12</text>
+  <text x="130" y="914" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">results/claims.json</text>
+  <text x="790" y="914" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">0444</text>
+  <text x="960" y="914" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="end" letter-spacing="0">1,234,526</text>
+  <rect x="1010" y="897" width="455" height="18" rx="5" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <rect x="1010" y="897" width="455" height="18" rx="5" fill="#6eb7ff" stroke="#6eb7ff" stroke-width="1"/>
+  <text x="86" y="960" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">13</text>
+  <text x="130" y="960" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">results/report.json</text>
+  <text x="790" y="960" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">0444</text>
+  <text x="960" y="960" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="end" letter-spacing="0">988,701</text>
+  <rect x="1010" y="943" width="455" height="18" rx="5" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <rect x="1010" y="943" width="364" height="18" rx="5" fill="#6eb7ff" stroke="#6eb7ff" stroke-width="1"/>
+  <rect x="78" y="979" width="1444" height="39" rx="4" fill="#0d1a2c" stroke="#0d1a2c" stroke-width="2"/>
+  <text x="86" y="1006" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">14</text>
+  <text x="130" y="1006" fill="#ffd166" font-family="monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0">release-manifest.json</text>
+  <text x="790" y="1006" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">0444</text>
+  <text x="960" y="1006" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="end" letter-spacing="0">8,152</text>
+  <rect x="1010" y="989" width="455" height="18" rx="5" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <rect x="1010" y="989" width="3" height="18" rx="5" fill="#ffd166" stroke="#ffd166" stroke-width="1"/>
+  <rect x="60" y="1090" width="1480" height="55" rx="12" fill="#211c37" stroke="#b8a1ff" stroke-width="2"/>
+  <text x="88" y="1125" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">receipt_root: 668d2093bef503c0c43300f586427124863d59fc5b75d223d2396fb28da6f313</text>
+  <line x1="60" y1="1154" x2="1540" y2="1154" stroke="#2d4665" stroke-width="2" stroke-linecap="round"/>
+  <rect x="60" y="1172" width="170" height="42" rx="21" fill="#2b1d28" stroke="#ff7b86" stroke-width="2"/>
+  <text x="145" y="1200" fill="#ffd7db" font-family="monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0">official: false</text>
+  <text x="250" y="1188" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">source: validated receipt files[] · exact byte_length and mode fields</text>
+  <text x="250" y="1212" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">nonclaim: inventory is an integrity record, not a signature or proof of independent provenance</text>
+</svg>
