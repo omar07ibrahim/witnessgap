@@ -912,6 +912,8 @@ def _validate_verdict_shape(certificate: VerifiedAttribution) -> None:
         needs_pair = certificate.unknown_reason is UnknownReason.AMBIGUOUS_WORLDS
         if needs_pair != (certificate.ambiguity_commitments is not None):
             raise ValueError("ambiguous-world verdicts require exactly one ambiguity pair")
+        if needs_pair:
+            _validate_ambiguous_verdict_shape(certificate)
         return
     if certificate.kind is VerdictKind.EFFECT_ONLY:
         if (
@@ -936,11 +938,30 @@ def _validate_verdict_shape(certificate: VerifiedAttribution) -> None:
         len(family) == 1 and len(family[0]) > 1
     ):
         raise ValueError("identified_compound requires one multi-target set")
-    if (
-        certificate.kind is VerdictKind.ALTERNATIVE_MINIMAL_REPAIRS
-        and len(family) < _MIN_ALTERNATIVES
+    if certificate.kind is VerdictKind.ALTERNATIVE_MINIMAL_REPAIRS:
+        _validate_alternative_repairs(family)
+
+
+def _validate_ambiguous_verdict_shape(certificate: VerifiedAttribution) -> None:
+    if len(certificate.compatible_completion_commitments) < _PAIR_SIZE:
+        raise ValueError("ambiguous-world verdicts require at least two compatible completions")
+    ambiguity_commitments = certificate.ambiguity_commitments
+    if ambiguity_commitments is None or not set(ambiguity_commitments).issubset(
+        certificate.compatible_completion_commitments
     ):
+        raise ValueError("ambiguity commitments must be a subset of compatible completions")
+
+
+def _validate_alternative_repairs(family: TargetFamily) -> None:
+    if len(family) < _MIN_ALTERNATIVES:
         raise ValueError("alternative_minimal_repairs requires multiple target sets")
+    target_sets = tuple(frozenset(target_set) for target_set in family)
+    if any(
+        left < right or right < left
+        for index, left in enumerate(target_sets)
+        for right in target_sets[index + 1 :]
+    ):
+        raise ValueError("alternative_minimal_repairs target family must be an antichain")
 
 
 def _parse_attribution_certificate(payload: bytes) -> VerifiedAttribution:

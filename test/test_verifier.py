@@ -412,6 +412,74 @@ def test_certificate_record_round_trips_against_pinned_release_digests() -> None
     assert VerifiedAttribution.from_canonical_bytes(encoded) == certificate
 
 
+def test_certificate_serialization_rejects_ambiguity_pair_outside_compatible_set() -> None:
+    worlds = workspace_twins()
+    registry = CandidateRegistry.build(worlds)
+    evidence = registry.observe(worlds[0].world_id)
+    certificate = verify_registry_attribution(
+        workspace_sources(),
+        manifest=registry.manifest,
+        trust_anchor=trust_anchor_for_manifest(registry.manifest),
+        evidence=evidence,
+    )
+    object.__setattr__(
+        certificate,
+        "ambiguity_commitments",
+        ("0" * 64, "1" * 64),
+    )
+
+    with pytest.raises(ValueError, match="subset of compatible completions"):
+        certificate.to_canonical_bytes()
+
+
+def test_certificate_serialization_rejects_ambiguous_single_compatible_world() -> None:
+    worlds = workspace_twins()
+    registry = CandidateRegistry.build(worlds)
+    evidence = registry.observe(worlds[0].world_id)
+    certificate = verify_registry_attribution(
+        workspace_sources(),
+        manifest=registry.manifest,
+        trust_anchor=trust_anchor_for_manifest(registry.manifest),
+        evidence=evidence,
+    )
+    object.__setattr__(
+        certificate,
+        "compatible_completion_commitments",
+        certificate.compatible_completion_commitments[:1],
+    )
+
+    with pytest.raises(ValueError, match="at least two compatible completions"):
+        certificate.to_canonical_bytes()
+
+
+def test_certificate_serialization_rejects_nested_alternative_repairs() -> None:
+    worlds = workspace_twins()
+    registry = CandidateRegistry.build(worlds)
+    evidence = registry.observe(
+        world(WorkspaceCause.ENVIRONMENT).world_id,
+        probes=("draft_store_epoch",),
+    )
+    certificate = verify_registry_attribution(
+        workspace_sources(),
+        manifest=registry.manifest,
+        trust_anchor=trust_anchor_for_manifest(registry.manifest),
+        evidence=evidence,
+    )
+    object.__setattr__(
+        certificate,
+        "kind",
+        VerdictKind.ALTERNATIVE_MINIMAL_REPAIRS,
+    )
+    object.__setattr__(
+        certificate,
+        "target_family",
+        (("environment",), ("environment", "policy")),
+    )
+
+    with pytest.raises(ValueError, match="target family must be an antichain"):
+        certificate.to_canonical_bytes()
+
+
 @pytest.mark.parametrize(
     ("field", "replacement"),
     [
