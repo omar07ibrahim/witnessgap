@@ -207,6 +207,16 @@ class WorkerBackend(Protocol):
     def invoke(self, request: bytes, *, limits: WorkerLimits) -> RawWorkerExit: ...
 
 
+def python_worker_program_digest(program_source: bytes) -> str:
+    """Bind exact standalone Python source bytes used by a worker backend."""
+
+    if type(program_source) is not bytes:
+        raise TypeError("worker program_source must be exact bytes")
+    if not program_source or len(program_source) > _MAX_PROGRAM_BYTES:
+        raise ValueError("worker program_source exceeds its byte bounds")
+    return tagged_digest(_PYTHON_PROGRAM_DOMAIN, program_source)
+
+
 @dataclass(frozen=True, slots=True)
 class LocalPythonProcessBackend:
     """Stage and run one trusted stdlib-only Python program per invocation.
@@ -225,10 +235,7 @@ class LocalPythonProcessBackend:
     def __post_init__(self) -> None:
         if os.name != "posix":
             raise RuntimeError("local Python worker backend requires POSIX process groups")
-        if type(self.program_source) is not bytes:
-            raise TypeError("worker program_source must be exact bytes")
-        if not self.program_source or len(self.program_source) > _MAX_PROGRAM_BYTES:
-            raise ValueError("worker program_source exceeds its byte bounds")
+        python_worker_program_digest(self.program_source)
         _require_digest(self.runtime_digest, field="worker runtime_digest")
         if type(self.interpreter) is not str:
             raise TypeError("worker interpreter must be an exact string")
@@ -250,7 +257,7 @@ class LocalPythonProcessBackend:
 
     @property
     def program_implementation_digest(self) -> str:
-        return tagged_digest(_PYTHON_PROGRAM_DOMAIN, self.program_source)
+        return python_worker_program_digest(self.program_source)
 
     @property
     def implementation_digest(self) -> str:
