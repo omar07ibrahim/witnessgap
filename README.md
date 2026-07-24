@@ -111,11 +111,18 @@ artifact against a fresh decode. Corpus-wide tests independently verify all
 decodes. An adversarial suite also rejects field-level trace, terminal,
 state-log, intervention, and cross-twin artifact splices.
 
-This is runtime verification, not a benchmark result. The next release gate is
-the capability-separated evidence worker, deterministic evaluator, and
-seed-provenance release record. Participant code must not receive the full
-WitnessGap package because it contains the authored catalog and sealed-source
-generator.
+Verified panels now project into four closed evidence views without consulting
+the search oracle: 400 private episode-to-view assignments deduplicate to 300
+participant cases with frozen `50/50/100/100` denominators. Private completion
+routes bind every case to its registry and source snapshot, while the worker
+wire omits routing IDs, labels, other views, and unqueried receipts. Recursive
+leak checks inspect decoded byte fields as well as the JSON wrapper.
+
+This is verified in-memory evidence construction, not a benchmark result. The
+next release gate is a fresh-process capability harness, deterministic
+evaluator and truth records, and seed-provenance release record. Participant
+code must not receive the full WitnessGap package because it contains the
+authored catalog and sealed-source generator.
 
 See [the attribution contract](docs/attribution-contract.md) for the current
 formal boundary, [the threat model](docs/threat-model.md) for the trusted

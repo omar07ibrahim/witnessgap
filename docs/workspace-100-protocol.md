@@ -3,10 +3,11 @@
 Protocol ID: `workspace-100-v1`
 
 Status: frozen protocol with an implemented authored catalog, in-memory
-sealed-source generator, and trusted runtime adapter. No release artifact
-corpus, capability-separated evaluation, evaluated claim, or benchmark result
-exists yet. A change to size, evidence views, scoring grain, metric formulas,
-or semantic contracts requires a new protocol ID.
+sealed-source generator, trusted runtime adapter, closed participant wire, and
+verified evidence-view projection. No release artifact corpus, isolated worker
+harness, evaluated claim, or benchmark result exists yet. A change to size,
+evidence views, scoring grain, metric formulas, or semantic contracts requires
+a new protocol ID.
 
 Workspace-100 is the Stage B engineering slice for WitnessGap. It tests two
 claims inside one synthetic, finite family:
@@ -180,6 +181,15 @@ or unqueried receipt.
 Public evidence is assembled from independently verified receipts, never from
 search-time `RepairPanel` caches.
 
+The implemented in-memory projection independently derives 100 panels and 200
+probe receipts, emits 400 private episode-to-view assignments, and
+deduplicates them by the full evidence digest into the frozen 300 cases.
+Private completion routes bind each assignment to its exact registry,
+completion commitment, source snapshot, and four expected evidence digests.
+The public case bytes contain none of that routing metadata. Assignment,
+evidence, and combined projection roots commit the two sides separately and
+together.
+
 ## 6. Grouped split
 
 Pairs are indivisible. Templates, not records, define the split:
@@ -264,13 +274,22 @@ reported as method-level verifier rejections.
 
 ## 9. Evaluation isolation and artifacts
 
-The generator and evaluator are capability-separated. A participant worker is
-started without the repository checkout, sealed artifact directory, or the
-full installed WitnessGap package and receives one canonical `Evidence`
-record. Merely hiding the checkout is insufficient because the main package
-contains the authored catalog and generator. The worker cannot receive an
-episode ID, pair ID, source opening, commitment salt, other view, unqueried
-receipt, or label.
+The release generator and evaluator must be capability-separated. A
+participant worker must start without the repository checkout, sealed artifact
+directory, or the full installed WitnessGap package and receive exactly one
+canonical `Evidence` record. Merely hiding the checkout is insufficient
+because the main package contains the authored catalog and generator. The
+worker cannot receive an explicit episode ID, pair ID, source opening,
+commitment salt, other view, unqueried receipt, or label.
+
+The registry digest is necessarily stable across the six cases derived from
+one pair, and the coverage digest is stable within a template. The ID-free wire
+is therefore linkable if multiple records reach one stateful process. A
+conforming launcher must create a fresh isolated worker for each single record
+and expose neither canonical case position nor parent metadata. Canonical
+`view → template → digest` ordering exists only for deterministic roots; it is
+not an execution schedule. The current repository does not yet implement or
+claim this isolation gate.
 
 The deterministic release layout is:
 
