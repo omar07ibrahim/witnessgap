@@ -120,7 +120,10 @@ An ambiguity certificate contains two sealed world completions that:
 - produce different normalized minimal-witness target sets.
 
 Certificate verification is separate from witness search. The verifier replays
-receipts from source artifacts and does not trust cached solver labels.
+every subset from a fresh source snapshot, evaluates terminal artifacts through
+the declared success oracle, and does not trust cached solver labels. Positive
+identification is a universal claim over every compatible committed completion;
+checking one successful witness and its subsets is not sufficient.
 
 ## 6. Vertical-slice release gates
 

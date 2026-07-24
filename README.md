@@ -55,11 +55,17 @@ intervention efficiency.
 
 ## Status
 
-WitnessGap is at the contract stage. There is no benchmark result yet.
+WitnessGap is building its first vertical slice. There is no benchmark result
+yet.
 
-The first vertical slice will contain one deterministic in-memory tool world,
-an exhaustive repair oracle, an independent certificate verifier, and paired
-cases that must remain `unknown` until an informative probe is exposed.
+The current core contains one deterministic in-memory tool world, an
+exhaustive search oracle, a manifest-bound causal-twin registry, and a separate
+verifier that reconstructs every intervention panel from fresh runner
+snapshots. Search-time `minimal_witnesses` and `target_family` caches are
+outside that verifier's trust path.
+
+The next release gate is a 100-episode Workspace slice with 50 exact twin pairs
+that remain `unknown` until an informative probe or replay result is exposed.
 
 See [the attribution contract](docs/attribution-contract.md) for the current
 formal boundary and release gates.
