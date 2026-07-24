@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import cast
 
 from witnessgap.canonical import JsonValue, canonical_digest, canonical_json
 from witnessgap.model import (
@@ -15,6 +16,7 @@ from witnessgap.model import (
     ReplayResult,
     StateRead,
 )
+from witnessgap.source import SealedWorldSource
 
 
 class WorkspaceCause(StrEnum):
@@ -32,6 +34,15 @@ _PREVIOUS_REVISION = "release-notes-v17"
 _TASK_SCHEMA_ID = "workspace_release_notes_v1"
 _TASK_ID = "northstar_release_notes_001"
 _STATE_CHANNELS = ("draft_store_epoch", "policy_selection")
+_SOURCE_FORMAT = "witnessgap.workspace-source.v1"
+_SOURCE_SALTS = {
+    WorkspaceCause.ENVIRONMENT: bytes.fromhex(
+        "3129d2854013fd4074f80a374fdb021d51731ba66c416c7463cbdf546d72ee21"
+    ),
+    WorkspaceCause.POLICY: bytes.fromhex(
+        "a5955e58dd4058e4c36cad1e41de66751078b5bff11b9989eadd7a58445b1786"
+    ),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +59,7 @@ class _WorkspaceState:
 @dataclass(slots=True)
 class _WorkspaceRunner:
     initial_state: _WorkspaceState
+    source_snapshot_digest: str
     _used: bool = False
 
     def run(self, interventions: frozenset[str]) -> ExecutionArtifact:
@@ -121,6 +133,7 @@ class _WorkspaceRunner:
             }
         )
         return ExecutionArtifact(
+            source_snapshot_digest=self.source_snapshot_digest,
             public_trace=trace,
             terminal_state=terminal_state,
             state_read_log=tuple(reads),
@@ -128,11 +141,29 @@ class _WorkspaceRunner:
         )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class WorkspaceWorld:
     """Two hidden completions that share the same failed public trace."""
 
     cause: WorkspaceCause
+    sealed_source: SealedWorldSource
+
+    def __init__(self, cause: WorkspaceCause) -> None:
+        if not isinstance(cause, WorkspaceCause):
+            raise TypeError("cause must be a WorkspaceCause")
+        object.__setattr__(self, "cause", cause)
+        object.__setattr__(self, "sealed_source", workspace_source(cause))
+
+    @classmethod
+    def _from_sealed_source(
+        cls,
+        cause: WorkspaceCause,
+        source: SealedWorldSource,
+    ) -> WorkspaceWorld:
+        world = object.__new__(cls)
+        object.__setattr__(world, "cause", cause)
+        object.__setattr__(world, "sealed_source", source)
+        return world
 
     @property
     def world_id(self) -> str:
@@ -152,14 +183,11 @@ class WorkspaceWorld:
 
     @property
     def completion_commitment(self) -> str:
-        state = self._initial_state()
-        payload: dict[str, JsonValue] = {
-            "approved_pointer": state.approved_pointer,
-            "format": "witnessgap.workspace-completion.v1",
-            "selected_pointer": state.selected_pointer,
-            "task_id": self.task_id,
-        }
-        return canonical_digest("witnessgap.world-completion.v1", payload)
+        return self.sealed_source.completion_commitment
+
+    @property
+    def source_snapshot_digest(self) -> str:
+        return self.sealed_source.snapshot_digest
 
     @property
     def intervention_contract_digest(self) -> str:
@@ -221,7 +249,10 @@ class WorkspaceWorld:
         return canonical_json({"name": name, "value": value})
 
     def fresh_runner(self) -> ExecutionRunner:
-        return _WorkspaceRunner(self._initial_state())
+        return _WorkspaceRunner(
+            self._initial_state(),
+            source_snapshot_digest=self.source_snapshot_digest,
+        )
 
     def evaluate_terminal(self, terminal_state: bytes) -> Outcome:
         try:
@@ -261,12 +292,96 @@ class WorkspaceWorld:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class WorkspaceSourceAdapter:
+    """Closed decoder for the versioned Workspace completion format."""
+
+    def decode(self, source: SealedWorldSource) -> WorkspaceWorld:
+        try:
+            raw: object = json.loads(source.source_bytes)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("workspace source is not valid UTF-8 JSON") from error
+        if not isinstance(raw, dict) or canonical_json(cast(JsonValue, raw)) != source.source_bytes:
+            raise ValueError("workspace source is not canonical JSON")
+        if set(raw) != {"format", "initial_state", "task_id", "task_schema_id"}:
+            raise ValueError("workspace source contains unknown or missing fields")
+        if (
+            raw["format"] != _SOURCE_FORMAT
+            or raw["task_id"] != _TASK_ID
+            or raw["task_schema_id"] != _TASK_SCHEMA_ID
+        ):
+            raise ValueError("workspace source declares an unsupported schema")
+        initial_state = raw["initial_state"]
+        if not isinstance(initial_state, dict) or set(initial_state) != {
+            "approved_pointer",
+            "selected_pointer",
+        }:
+            raise ValueError("workspace source contains an invalid initial state")
+        approved_pointer = initial_state["approved_pointer"]
+        selected_pointer = initial_state["selected_pointer"]
+        if not isinstance(approved_pointer, str) or not isinstance(selected_pointer, str):
+            raise ValueError("workspace source state values must be strings")
+        state = _WorkspaceState(
+            approved_pointer=approved_pointer,
+            selected_pointer=selected_pointer,
+        )
+        cause = _cause_for_state(state)
+        return WorkspaceWorld._from_sealed_source(cause, source)
+
+
+def workspace_source(cause: WorkspaceCause) -> SealedWorldSource:
+    """Return the canonical source bundle for one authored completion."""
+
+    if not isinstance(cause, WorkspaceCause):
+        raise TypeError("cause must be a WorkspaceCause")
+    state = _initial_state_for(cause)
+    source_bytes = canonical_json(
+        {
+            "format": _SOURCE_FORMAT,
+            "initial_state": {
+                "approved_pointer": state.approved_pointer,
+                "selected_pointer": state.selected_pointer,
+            },
+            "task_id": _TASK_ID,
+            "task_schema_id": _TASK_SCHEMA_ID,
+        }
+    )
+    return SealedWorldSource(
+        source_bytes=source_bytes,
+        commitment_salt=_SOURCE_SALTS[cause],
+    )
+
+
+def workspace_sources() -> tuple[SealedWorldSource, SealedWorldSource]:
+    """Return the complete authored source family in commitment order."""
+
+    sources = tuple(workspace_source(cause) for cause in WorkspaceCause)
+    first, second = sorted(sources, key=lambda source: source.completion_commitment)
+    return first, second
+
+
 def workspace_twins() -> tuple[WorkspaceWorld, WorkspaceWorld]:
     """Return the deterministic policy/environment causal-twin pair."""
 
-    worlds = (
-        WorkspaceWorld(WorkspaceCause.ENVIRONMENT),
-        WorkspaceWorld(WorkspaceCause.POLICY),
-    )
-    first, second = sorted(worlds, key=lambda world: world.world_id)
+    adapter = WorkspaceSourceAdapter()
+    first, second = (adapter.decode(source) for source in workspace_sources())
     return first, second
+
+
+def _initial_state_for(cause: WorkspaceCause) -> _WorkspaceState:
+    if cause is WorkspaceCause.ENVIRONMENT:
+        return _WorkspaceState(
+            approved_pointer=_PREVIOUS_REVISION,
+            selected_pointer="approved",
+        )
+    return _WorkspaceState(
+        approved_pointer=_APPROVED_REVISION,
+        selected_pointer=_PREVIOUS_REVISION,
+    )
+
+
+def _cause_for_state(state: _WorkspaceState) -> WorkspaceCause:
+    for cause in WorkspaceCause:
+        if state == _initial_state_for(cause):
+            return cause
+    raise ValueError("workspace source initial state is outside the authored completion family")

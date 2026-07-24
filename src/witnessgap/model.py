@@ -82,12 +82,17 @@ class StateRead:
 class ExecutionArtifact:
     """Raw runner output evaluated later by a separate success oracle."""
 
+    source_snapshot_digest: str
     public_trace: bytes
     terminal_state: bytes
     state_read_log: tuple[StateRead, ...]
     intervention_log: tuple[str, ...]
 
     def __post_init__(self) -> None:
+        if len(self.source_snapshot_digest) != _SHA256_HEX_LENGTH or any(
+            character not in "0123456789abcdef" for character in self.source_snapshot_digest
+        ):
+            raise ValueError("source_snapshot_digest must be lowercase SHA-256")
         if not isinstance(self.public_trace, bytes) or not isinstance(self.terminal_state, bytes):
             raise TypeError("execution trace and terminal state must be bytes")
         sequences = tuple(read.sequence for read in self.state_read_log)

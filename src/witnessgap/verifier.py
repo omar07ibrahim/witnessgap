@@ -105,6 +105,7 @@ class VerifiedReceipt:
                 "witnessgap.public-trace.v1",
                 self.artifact.public_trace,
             ),
+            "source_snapshot_digest": self.artifact.source_snapshot_digest,
             "state_read_log_digest": canonical_digest(
                 "witnessgap.state-read-log.v1",
                 state_reads,
