@@ -165,6 +165,7 @@ closed exact report under an independently expected report root. See
 [the scoring and report contract](scoring-report.md). Truth remains outside
 participant workers.
 
-The repository still does not materialize a public release directory or
-release manifest. The measured built-in regression is therefore not presented
-as a public benchmark release.
+The repository now implements a deterministic release directory, closed
+manifest, fail-closed materializer/loader, and semantic verifier. It still
+publishes no independently authenticated public release tree, and the measured
+built-in regression is therefore not presented as a public benchmark release.

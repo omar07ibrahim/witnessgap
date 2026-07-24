@@ -7,12 +7,14 @@ sealed-source generator, trusted runtime adapter, closed participant wire, and
 verified evidence-view projection, evaluator truth certificates, and a
 fresh-process transport with four pinned trusted baseline bundles. A closed
 4×300 baseline execution evaluator, 1,200-run ClaimSet, truth-joined exact
-scorer, and closed canonical report are also implemented. No materialized
-release directory, release manifest, third-party-code isolation backend, or
-public benchmark result exists yet. A change to size, evidence views, scoring
-grain, numeric metric formulas, or semantic contracts requires a new protocol
-ID. The pre-release clarification for two non-observable metric names is
-recorded in Section 8 and the
+scorer, and closed canonical report are also implemented. The repository also
+contains a deterministic 13-payload release builder, a closed 25-binding
+manifest, fail-closed POSIX materialization/loading, and a full semantic
+release verifier. No authenticated public release, third-party-code isolation
+backend, or public benchmark result exists yet. A change to size, evidence
+views, scoring grain, numeric metric formulas, or semantic contracts requires
+a new protocol ID. The pre-release clarification for two non-observable metric
+names is recorded in Section 8 and the
 [scoring contract](scoring-report.md).
 
 Workspace-100 is the Stage B engineering slice for WitnessGap. It tests two
@@ -413,8 +415,10 @@ workspace100/v1/
   baselines/baseline-set.json
   authored/templates.json
   authored/variants.json
+  sealed/generation.json
   sealed/sources.jsonl
   registries.jsonl
+  verified/trust-anchors.jsonl
   verified/panels.jsonl
   public/views.jsonl
   truth/labels.jsonl
@@ -433,15 +437,16 @@ process receives only that staged source plus one evidence envelope; the
 authoring package is neither installed nor mounted in the child.
 
 `sealed`, `verified`, and `truth` are never mounted into the participant
-worker. They may be published after evaluation for reproducibility; this
-remains an open engineering slice, not a hidden leaderboard.
+worker. The development-candidate builder includes them so a trusted evaluator
+can replay every semantic binding. No such tree is currently authenticated and
+published as a public benchmark release.
 
 All files use closed canonical schemas, deterministic ordering, no timestamps,
-and no absolute paths. The implemented report builder derives canonical report
-bytes from authenticated, canonical-copied ClaimSet and truth records.
-Human-readable tables must be rendered from those bytes rather than written by
-hand. Materializing them at `results/report.json` remains release-generator
-work.
+and no absolute paths. The implemented release builder derives canonical
+report bytes from authenticated, canonical-copied ClaimSet and truth records,
+writes them at `results/report.json`, and exposes the manifest only after the
+complete candidate has been validated. Human-readable tables must be rendered
+from those bytes rather than written by hand.
 
 ## 10. Release gates
 
@@ -484,9 +489,12 @@ A public release is rejected unless all gates pass:
     truth root, assignment/evidence/projection roots, and baseline-set root.
 
 The implemented ClaimSet establishes the execution half of gate 18. The scorer
-enforces gate 13 and the report-binding half of gate 18 for the frozen
-in-memory regression. Gates 12, 16, and 17 remain open, so no materialized
-public Workspace-100 release exists yet.
+enforces gate 13 and the report-binding half of gate 18. The release builder,
+manifest, loader, and semantic verifier implement the gate-17 record and replay
+machinery, but no consumer has an independently authenticated public release
+root. Gate 12 has not been established for two clean, honest runtime-bound
+candidate captures, and gate 16 remains open. Therefore no public
+Workspace-100 benchmark release exists yet.
 
 Expected view-level assertions:
 

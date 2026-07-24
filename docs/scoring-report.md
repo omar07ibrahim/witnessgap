@@ -256,9 +256,11 @@ All omitted categories are zero. The corresponding overall exact rates are:
 | `refresh_outcome` | 1/3 | 0 | 0 | 0 | 1 | 1/2 | 1/2 |
 
 These are measured deterministic regression results for the reviewed built-in
-programs. They are not yet a materialized public benchmark release. Release
-gates for clean-run reproducibility, a manifest, provenance, and hostile-code
-isolation remain separate.
+programs. They are not a published public benchmark release. The repository
+implements candidate manifest, provenance, materialization, and semantic
+replay machinery; two clean honest-runtime captures, an independently
+authenticated release root, and hostile-code isolation remain separate release
+requirements.
 
 Finally, every digest above is a content identity, not a signature, runtime
 attestation, or proof that the code currently loaded in a Python process is

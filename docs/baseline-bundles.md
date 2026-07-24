@@ -165,9 +165,10 @@ checks a regression-pinned exact report. The measured false-certainty,
 exact-target, exact-witness, abstention, and coverage values are in
 [the scoring contract](scoring-report.md).
 
-That in-memory regression is not a materialized public benchmark release. See
-[the ClaimSet contract](claim-set.md) for the execution boundary and the
-remaining external-authentication requirements.
+That measured regression is not a published public benchmark release. The
+repository can now build, materialize, load, and semantically replay a
+development candidate; see [the ClaimSet contract](claim-set.md) for the
+execution boundary and the remaining independent-authentication requirements.
 
 The local POSIX backend remains suitable only for these reviewed built-ins. It
 does not make arbitrary participant code safe; the external isolation gate in

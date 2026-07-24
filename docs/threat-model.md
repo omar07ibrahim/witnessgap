@@ -17,6 +17,8 @@ For the current vertical slice, a verifier operator trusts:
   pinned implementation digest;
 - the installed Workspace-100 truth-joined scorer/report closure identified by
   its pinned implementation digest;
+- the installed Workspace-100 release builder, materializer, loader, and
+  semantic verifier closures identified by their manifest bindings;
 - the parent-selected worker backend, runtime identity, and exact limits;
 - an independently distributed trust-anchor record;
 - the procedure that keeps sealed sources and labels outside the participant
@@ -38,7 +40,8 @@ The verifier treats all of the following as untrusted:
 - runner artifacts;
 - serialized certificate records;
 - serialized Workspace-100 ClaimSet records; and
-- serialized Workspace-100 truth and score-report records.
+- serialized Workspace-100 truth and score-report records; and
+- serialized Workspace-100 release manifests and payload trees.
 
 Boundary values must use exact built-in `bytes`, `str`, `tuple`, `list`, and
 `dict` types. Subclasses are rejected before hashing, equality checks, or
