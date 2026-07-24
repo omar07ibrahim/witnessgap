@@ -38,6 +38,41 @@ declared family; it does not prove that an omitted real-world mechanism cannot
 exist. WitnessGap does not infer arbitrary production causality from
 incomplete logs.
 
+## Smallest complete example
+
+```python
+from witnessgap.identifiability import CandidateRegistry
+from witnessgap.verifier import (
+    trust_anchor_for_manifest,
+    verify_attribution_certificate,
+    verify_registry_attribution,
+)
+from witnessgap.worlds.workspace import workspace_sources, workspace_twins
+
+worlds = workspace_twins()
+registry = CandidateRegistry.build(worlds)
+evidence = registry.observe(worlds[0].world_id)
+anchor = trust_anchor_for_manifest(registry.manifest)
+
+certificate = verify_registry_attribution(
+    workspace_sources(),
+    manifest=registry.manifest,
+    trust_anchor=anchor,
+    evidence=evidence,
+)
+
+verified_record = verify_attribution_certificate(
+    certificate.to_canonical_bytes(),
+    trust_anchor=anchor,
+    expected_proof_root=certificate.proof_root,
+)
+assert verified_record.kind == "not_identifiable"
+```
+
+`trust_anchor_for_manifest` is an authoring helper. A consumer must receive the
+resulting anchor and expected proof root through an independent release channel;
+generating them from the certificate under review would provide no trust.
+
 ## Why another benchmark?
 
 Recent systems already cover stochastic do-replay, confidence intervals,
@@ -60,16 +95,21 @@ yet.
 
 The current core contains one deterministic in-memory tool world, an
 exhaustive search oracle, a manifest-bound causal-twin registry, and a separate
-verifier that reconstructs every intervention panel from fresh runner
-snapshots. Search-time `minimal_witnesses` and `target_family` caches are
-outside that verifier's trust path.
+verifier that accepts exact sealed source bytes rather than executable world
+objects. It resolves a versioned adapter from an internal trust store,
+reconstructs a new world for every replay and probe, validates the complete
+trace/terminal/read-log artifact, and binds the result to externally pinned
+registry, adapter, and verifier digests. Search-time `minimal_witnesses` and
+`target_family` caches are outside that verifier's trust path.
 
 The next release gate is a 100-episode Workspace slice with 50 exact twin pairs
 that remain `unknown` until an informative probe or replay result is exposed.
 
 See [the attribution contract](docs/attribution-contract.md) for the current
-formal boundary and [Workspace-100 protocol](docs/workspace-100-protocol.md) for
-the frozen Stage B slice.
+formal boundary, [the threat model](docs/threat-model.md) for the trusted
+computing base, and
+[Workspace-100 protocol](docs/workspace-100-protocol.md) for the frozen Stage B
+slice.
 
 ## Related work
 

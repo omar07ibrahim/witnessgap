@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import cast
 
 import pytest
 
-from witnessgap.canonical import JsonValue, canonical_digest
+from witnessgap.canonical import JsonValue, canonical_digest, canonical_json
 from witnessgap.identifiability import (
     CandidateRegistry,
     Evidence,
@@ -12,6 +13,7 @@ from witnessgap.identifiability import (
     InterventionObservation,
     ProbeObservation,
     RegistryError,
+    RegistryManifest,
     UnknownReason,
     VerdictKind,
 )
@@ -162,12 +164,23 @@ class RegistryFixtureWorld:
     repair_mode: str = "singleton"
     task_schema_id: str = "registry_fixture_v1"
     task_id: str = "registry_fixture_task"
+    source_format_id: str = "witnessgap.test-source.v1"
+    adapter_id: str = "registry_fixture_v1"
     declared_state_channels: tuple[str, ...] = ()
     state_reads: tuple[str, ...] = ()
     intervention_contract_version: str = "fixture_interventions_v1"
     probe_contract_version: str = "fixture_probes_v1"
     runner_contract_version: str = "fixture_runner_v1"
+    artifact_validator_contract_version: str = "fixture_artifact_validator_v1"
     success_oracle_contract_version: str = "fixture_success_oracle_v1"
+    state_access_contract_version: str = "fixture_state_access_v1"
+
+    @property
+    def adapter_implementation_digest(self) -> str:
+        return canonical_digest(
+            "witnessgap.adapter-implementation.v1",
+            {"version": "fixture_adapter_v1"},
+        )
 
     @property
     def completion_commitment(self) -> str:
@@ -200,10 +213,24 @@ class RegistryFixtureWorld:
         )
 
     @property
+    def artifact_validator_contract_digest(self) -> str:
+        return canonical_digest(
+            "witnessgap.artifact-validator-contract.v1",
+            {"version": self.artifact_validator_contract_version},
+        )
+
+    @property
     def success_oracle_contract_digest(self) -> str:
         return canonical_digest(
             "witnessgap.success-oracle-contract.v1",
             {"version": self.success_oracle_contract_version},
+        )
+
+    @property
+    def state_access_contract_digest(self) -> str:
+        return canonical_digest(
+            "witnessgap.state-access-contract.v1",
+            {"version": self.state_access_contract_version},
         )
 
     @property
@@ -329,6 +356,63 @@ def test_manifest_binds_evidence_and_the_declared_candidate_family() -> None:
     forged = replace(evidence, registry_digest="0" * 64)
     with pytest.raises(EvidenceMismatchError, match="registry manifest"):
         registry.attribute(forged)
+
+
+def test_manifest_has_one_closed_canonical_round_trip() -> None:
+    manifest = CandidateRegistry.build(workspace_twins()).manifest
+    encoded = manifest.to_canonical_bytes()
+
+    parsed = RegistryManifest.from_canonical_bytes(encoded)
+
+    assert parsed == manifest
+    assert parsed.to_canonical_bytes() == encoded
+    assert parsed.digest == manifest.digest
+
+
+def test_manifest_parser_rejects_noncanonical_and_open_schemas() -> None:
+    manifest = CandidateRegistry.build(workspace_twins()).manifest
+    open_payload = manifest.to_payload()
+    open_payload["uncommitted_hint"] = "environment"
+
+    with pytest.raises(RegistryError, match="canonical JSON"):
+        RegistryManifest.from_canonical_bytes(manifest.to_canonical_bytes().rstrip(b"\n"))
+    with pytest.raises(RegistryError, match="unknown or missing"):
+        RegistryManifest.from_canonical_bytes(canonical_json(open_payload))
+
+
+def test_manifest_parser_rejects_a_forged_coverage_digest() -> None:
+    manifest = CandidateRegistry.build(workspace_twins()).manifest
+    payload = manifest.to_payload()
+    payload["coverage_manifest_digest"] = "0" * 64
+
+    with pytest.raises(RegistryError, match="coverage manifest digest"):
+        RegistryManifest.from_canonical_bytes(canonical_json(payload))
+
+
+def test_manifest_constructor_rejects_duplicate_candidate_commitments() -> None:
+    manifest = CandidateRegistry.build(workspace_twins()).manifest
+    duplicate = manifest.candidate_commitments[0]
+
+    with pytest.raises(RegistryError, match="candidate_commitments"):
+        replace(manifest, candidate_commitments=(duplicate, duplicate))
+
+
+def test_evidence_rejects_tuple_subclasses_at_the_input_boundary() -> None:
+    class ProbeTuple(tuple[ProbeObservation, ...]):
+        pass
+
+    registry = CandidateRegistry.build(workspace_twins())
+    baseline = registry.observe(workspace_twins()[0].world_id)
+    probes = ProbeTuple((ProbeObservation("workspace_owner", b"owner"),))
+
+    with pytest.raises(TypeError, match="exact ProbeObservation"):
+        Evidence(
+            registry_digest=baseline.registry_digest,
+            coverage_manifest_digest=baseline.coverage_manifest_digest,
+            public_trace=baseline.public_trace,
+            outcome=baseline.outcome,
+            probes=cast(tuple[ProbeObservation, ...], probes),
+        )
 
 
 def test_workspace_completion_ids_are_opaque() -> None:
