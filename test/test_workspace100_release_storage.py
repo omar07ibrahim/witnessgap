@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from typing import cast
 
@@ -17,6 +18,12 @@ from witnessgap.verifier import (
     verifier_implementation_digest,
 )
 from witnessgap.workspace100 import release_storage as storage_module
+from witnessgap.workspace100.catalog import (
+    TEMPLATES,
+    VARIANTS,
+    template_catalog_digest,
+    variant_catalog_digest,
+)
 from witnessgap.workspace100.release_storage import (
     Workspace100CatalogSet,
     Workspace100GenerationProvenance,
@@ -24,14 +31,21 @@ from witnessgap.workspace100.release_storage import (
     Workspace100RegistrySet,
     Workspace100TrustAnchorSet,
     Workspace100VerifiedMaterialSet,
+    load_workspace100_public_evidence_views,
     load_workspace100_source_openings,
+    load_workspace100_template_catalog,
+    load_workspace100_variant_catalog,
+    workspace100_public_evidence_views_jsonl,
     workspace100_source_opening_root,
     workspace100_source_openings_jsonl,
     workspace100_source_root,
+    workspace100_template_catalog_bytes,
+    workspace100_variant_catalog_bytes,
 )
 from witnessgap.workspace100.views import (
     VerifiedCompletionMaterial,
     VerifiedPairMaterial,
+    Workspace100EvidenceViews,
     verify_workspace100_materials,
 )
 
@@ -45,6 +59,8 @@ _PAIR_COUNT = 50
 _COMPLETION_COUNT = 100
 _TEMPLATE_COUNT = 5
 _VARIANT_COUNT = 50
+_ASSIGNMENT_COUNT = 400
+_EVIDENCE_CASE_COUNT = 300
 _RECEIPT_COUNT = 400
 _PROBE_COUNT = 200
 _SHA256_HEX_LENGTH = 64
@@ -60,6 +76,12 @@ _EXPECTED_SOURCE_OPENING_ROOT = (
 _EXPECTED_CATALOG_ROOT = (
     "57e85b605cb8e193c9f1e84ae5b0f03e9f2e6bd73b6d00de8f5353798d795d94"
 )
+_EXPECTED_TEMPLATE_CATALOG_ROOT = (
+    "f79b66036002be18d0ea565a938138a893e999ba56ffac4fb7e1b2eedf19a0ee"
+)
+_EXPECTED_VARIANT_CATALOG_ROOT = (
+    "86a2583224475a81d0485f0f0110e973156bac3c11c8e28aba337d12b6434aa3"
+)
 _EXPECTED_PROTOCOL_ROOT = (
     "438b0405b79aa4403e3ee5737bcf0d2d3aa080078d0e2fd8650aa82899eb5f94"
 )
@@ -71,6 +93,9 @@ _EXPECTED_TRUST_ANCHOR_ROOT = (
 )
 _EXPECTED_VERIFIED_MATERIAL_ROOT = (
     "08600100802a8dab1e55243e268c3b64b18f48a2b024a89f76fc8634dc353ded"
+)
+_EXPECTED_EVIDENCE_ROOT = (
+    "4f5ed5eac99d3bf4eaedcafa3bbc019c06debba6372b4935dd57c6f09c9f3d71"
 )
 
 
@@ -134,6 +159,13 @@ def verified_material_set(
         registry_set=registry_set,
         materials=materials,
     )
+
+
+@pytest.fixture(scope="module")
+def public_evidence_jsonl(
+    verified_material_set: Workspace100VerifiedMaterialSet,
+) -> bytes:
+    return workspace100_public_evidence_views_jsonl(verified_material_set)
 
 
 def _opened(payload: bytes) -> dict[str, object]:
@@ -256,6 +288,70 @@ def test_catalog_parser_rejects_reorder_and_open_schema() -> None:
         Workspace100CatalogSet.from_canonical_bytes(
             canonical_json(cast(JsonValue, opened))
         )
+
+
+def test_separate_catalog_codecs_round_trip_under_frozen_semantic_roots() -> None:
+    template_payload = workspace100_template_catalog_bytes()
+    variant_payload = workspace100_variant_catalog_bytes()
+    templates = load_workspace100_template_catalog(template_payload)
+    variants = load_workspace100_variant_catalog(variant_payload)
+
+    assert templates == TEMPLATES
+    assert variants == VARIANTS
+    assert template_catalog_digest(templates) == _EXPECTED_TEMPLATE_CATALOG_ROOT
+    assert variant_catalog_digest(variants) == _EXPECTED_VARIANT_CATALOG_ROOT
+    assert workspace100_template_catalog_bytes() == template_payload
+    assert workspace100_variant_catalog_bytes() == variant_payload
+    assert set(_opened(template_payload)) == {"format", "protocol_id", "templates"}
+    assert set(_opened(variant_payload)) == {"format", "protocol_id", "variants"}
+
+
+@pytest.mark.parametrize(
+    ("loader", "encoder", "records_field"),
+    [
+        (
+            load_workspace100_template_catalog,
+            workspace100_template_catalog_bytes,
+            "templates",
+        ),
+        (
+            load_workspace100_variant_catalog,
+            workspace100_variant_catalog_bytes,
+            "variants",
+        ),
+    ],
+)
+def test_separate_catalog_loaders_reject_open_reordered_and_truncated_payloads(
+    loader: Callable[[bytes], object],
+    encoder: Callable[[], bytes],
+    records_field: str,
+) -> None:
+    payload = encoder()
+
+    opened = _opened(payload)
+    opened["generated_at"] = "2026-07-24T00:00:00Z"
+    with pytest.raises(ValueError, match="unknown or missing"):
+        loader(canonical_json(cast(JsonValue, opened)))
+
+    opened = _opened(payload)
+    records = _nested_array(opened, records_field)
+    records[0], records[1] = records[1], records[0]
+    with pytest.raises(ValueError, match="frozen catalog"):
+        loader(canonical_json(cast(JsonValue, opened)))
+
+    opened = _opened(payload)
+    _nested_array(opened, records_field).pop()
+    with pytest.raises(ValueError, match="cardinality"):
+        loader(canonical_json(cast(JsonValue, opened)))
+
+    opened = _opened(payload)
+    first = cast(dict[str, object], _nested_array(opened, records_field)[0])
+    first["release_path"] = "/tmp/catalog"
+    with pytest.raises(ValueError, match="unknown or missing"):
+        loader(canonical_json(cast(JsonValue, opened)))
+
+    with pytest.raises(ValueError):
+        loader(b" " + payload)
 
 
 def test_source_openings_are_exact_seed_regeneration(
@@ -631,6 +727,117 @@ def test_verified_material_parser_rejects_nested_tampering_and_reorder(
         )
 
 
+def test_public_evidence_jsonl_round_trips_as_one_authenticated_projection(
+    public_evidence_jsonl: bytes,
+    verified_material_set: Workspace100VerifiedMaterialSet,
+) -> None:
+    parsed = load_workspace100_public_evidence_views(
+        public_evidence_jsonl,
+        verified_material_set,
+    )
+    objects = _jsonl_objects(public_evidence_jsonl)
+
+    assert type(parsed) is Workspace100EvidenceViews
+    assert parsed.case_count == _EVIDENCE_CASE_COUNT
+    assert parsed.assignment_count == _ASSIGNMENT_COUNT
+    assert parsed.evidence_root == _EXPECTED_EVIDENCE_ROOT
+    assert workspace100_public_evidence_views_jsonl(
+        verified_material_set
+    ) == public_evidence_jsonl
+    assert len(objects) == _EVIDENCE_CASE_COUNT
+    assert all(
+        set(item)
+        == {
+            "evidence",
+            "evidence_digest",
+            "format",
+            "split",
+            "template_id",
+            "view",
+        }
+        for item in objects
+    )
+
+
+def test_public_evidence_loader_rejects_framing_order_and_cardinality(
+    public_evidence_jsonl: bytes,
+    verified_material_set: Workspace100VerifiedMaterialSet,
+) -> None:
+    with pytest.raises(ValueError, match="LF-terminated"):
+        load_workspace100_public_evidence_views(
+            public_evidence_jsonl[:-1],
+            verified_material_set,
+        )
+
+    objects = _jsonl_objects(public_evidence_jsonl)
+    objects[0], objects[1] = objects[1], objects[0]
+    with pytest.raises(ValueError, match="deterministic derivation"):
+        load_workspace100_public_evidence_views(
+            _jsonl_bytes(objects),
+            verified_material_set,
+        )
+
+    objects = _jsonl_objects(public_evidence_jsonl)
+    objects[1] = objects[0]
+    with pytest.raises(ValueError, match="deterministic derivation"):
+        load_workspace100_public_evidence_views(
+            _jsonl_bytes(objects),
+            verified_material_set,
+        )
+
+    with pytest.raises(ValueError, match="line count"):
+        load_workspace100_public_evidence_views(
+            _jsonl_bytes(_jsonl_objects(public_evidence_jsonl)[:-1]),
+            verified_material_set,
+        )
+
+    lines = public_evidence_jsonl.splitlines(keepends=True)
+    oversized_line_payload = (
+        b"x" * ((1 << 16) + 1) + b"\n" + b"".join(lines[1:])
+    )
+    with pytest.raises(ValueError, match="line count or line size"):
+        load_workspace100_public_evidence_views(
+            oversized_line_payload,
+            verified_material_set,
+        )
+
+
+def test_public_evidence_loader_rejects_open_shape_and_root_tampering(
+    public_evidence_jsonl: bytes,
+    verified_material_set: Workspace100VerifiedMaterialSet,
+) -> None:
+    objects = _jsonl_objects(public_evidence_jsonl)
+    objects[0]["source_path"] = "/tmp/private"
+    with pytest.raises(ValueError, match="unknown or missing"):
+        load_workspace100_public_evidence_views(
+            _jsonl_bytes(objects),
+            verified_material_set,
+        )
+
+    objects = _jsonl_objects(public_evidence_jsonl)
+    objects[0]["evidence_digest"] = "0" * 64
+    with pytest.raises(ValueError, match="deterministic derivation"):
+        load_workspace100_public_evidence_views(
+            _jsonl_bytes(objects),
+            verified_material_set,
+        )
+
+    objects = _jsonl_objects(public_evidence_jsonl)
+    evidence = _nested_object(objects[0], "evidence")
+    evidence["causal_target"] = "policy"
+    with pytest.raises(ValueError, match="deterministic derivation"):
+        load_workspace100_public_evidence_views(
+            _jsonl_bytes(objects),
+            verified_material_set,
+        )
+
+    with pytest.raises(TypeError, match="exact verified-material set"):
+        load_workspace100_public_evidence_views(
+            public_evidence_jsonl,
+            cast(Workspace100VerifiedMaterialSet, object()),
+        )
+
+
 def test_release_storage_payloads_have_no_floats_timestamps_or_paths(
     provenance: Workspace100GenerationProvenance,
     source_jsonl: bytes,
@@ -638,9 +845,14 @@ def test_release_storage_payloads_have_no_floats_timestamps_or_paths(
     trust_anchor_set: Workspace100TrustAnchorSet,
     verified_material_set: Workspace100VerifiedMaterialSet,
 ) -> None:
+    public_evidence_jsonl = workspace100_public_evidence_views_jsonl(
+        verified_material_set
+    )
     values: tuple[object, ...] = (
         json.loads(provenance.to_canonical_bytes()),
         json.loads(Workspace100CatalogSet().to_canonical_bytes()),
+        json.loads(workspace100_template_catalog_bytes()),
+        json.loads(workspace100_variant_catalog_bytes()),
         json.loads(
             Workspace100ProtocolRecord.for_provenance(
                 provenance
@@ -650,6 +862,7 @@ def test_release_storage_payloads_have_no_floats_timestamps_or_paths(
         *_jsonl_objects(registry_set.to_jsonl()),
         *_jsonl_objects(trust_anchor_set.to_jsonl()),
         *_jsonl_objects(verified_material_set.to_jsonl()),
+        *_jsonl_objects(public_evidence_jsonl),
     )
 
     keys: list[str] = []
@@ -679,6 +892,7 @@ def test_release_storage_payloads_have_no_floats_timestamps_or_paths(
 
 def test_storage_boundaries_reject_nonbytes_and_oversized_payloads(
     provenance: Workspace100GenerationProvenance,
+    verified_material_set: Workspace100VerifiedMaterialSet,
 ) -> None:
     with pytest.raises(TypeError, match="exact bytes"):
         Workspace100GenerationProvenance.from_canonical_bytes(
@@ -692,6 +906,15 @@ def test_storage_boundaries_reject_nonbytes_and_oversized_payloads(
         Workspace100RegistrySet.from_jsonl(
             b"x" * ((2 << 20) + 1),
             provenance,
+        )
+    with pytest.raises(ValueError, match="byte bound"):
+        load_workspace100_template_catalog(b"x" * ((1 << 17) + 1))
+    with pytest.raises(ValueError, match="byte bound"):
+        load_workspace100_variant_catalog(b"x" * ((1 << 20) + 1))
+    with pytest.raises(ValueError, match="byte bound"):
+        load_workspace100_public_evidence_views(
+            b"x" * ((4 << 20) + 1),
+            verified_material_set,
         )
     with pytest.raises(TypeError, match="exact registry set"):
         Workspace100TrustAnchorSet.from_jsonl(

@@ -23,6 +23,7 @@ from witnessgap.verifier import (
     VerifiedReceipt,
     verifier_implementation_digest,
 )
+from witnessgap.workspace100 import views as workspace100_views
 from witnessgap.workspace100.baselines import (
     BUILTIN_BASELINE_SET_ROOT,
     builtin_baseline_set,
@@ -52,13 +53,17 @@ from witnessgap.workspace100.runtime import (
     workspace100_pair_worlds,
 )
 from witnessgap.workspace100.views import (
+    PublicEvidenceCase,
     VerifiedCompletionMaterial,
     VerifiedPairMaterial,
     ViewKind,
+    Workspace100EvidenceViews,
 )
 
 GENERATION_PROVENANCE_FORMAT = "witnessgap.workspace100-generation-provenance.v1"
 CATALOG_SET_FORMAT = "witnessgap.workspace100-catalog-set.v1"
+TEMPLATE_CATALOG_FORMAT = "witnessgap.workspace100-template-catalog.v1"
+VARIANT_CATALOG_FORMAT = "witnessgap.workspace100-variant-catalog.v1"
 SOURCE_OPENING_FORMAT = "witnessgap.workspace100-source-opening.v1"
 SOURCE_OPENING_SET_FORMAT = "witnessgap.workspace100-source-opening-set.v1"
 PROTOCOL_RECORD_FORMAT = "witnessgap.workspace100-protocol-record.v1"
@@ -71,6 +76,7 @@ VERIFIED_PANEL_STORAGE_FORMAT = "witnessgap.workspace100-verified-panel-storage.
 VERIFIED_RECEIPT_STORAGE_FORMAT = "witnessgap.workspace100-verified-receipt-storage.v1"
 VERIFIED_PROBE_STORAGE_FORMAT = "witnessgap.workspace100-verified-probe-storage.v1"
 EXECUTION_ARTIFACT_STORAGE_FORMAT = "witnessgap.execution-artifact-storage.v1"
+PUBLIC_EVIDENCE_CASE_FORMAT = "witnessgap.workspace100-evidence-case.v1"
 
 _GENERATION_SEED_DOMAIN = "witnessgap.workspace100-generation-seed.v1"
 _PAIR_COUNT = 50
@@ -88,6 +94,8 @@ _SEED_BYTES = 32
 _SHA256_HEX_LENGTH = 64
 _MAX_PROVENANCE_BYTES = 1 << 14
 _MAX_CATALOG_BYTES = 1 << 20
+_MAX_TEMPLATE_CATALOG_BYTES = 1 << 17
+_MAX_VARIANT_CATALOG_BYTES = 1 << 20
 _MAX_SOURCE_JSONL_BYTES = 4 << 20
 _MAX_SOURCE_LINE_BYTES = 1 << 17
 _MAX_PROTOCOL_BYTES = 1 << 17
@@ -97,6 +105,8 @@ _MAX_ANCHOR_JSONL_BYTES = 1 << 18
 _MAX_ANCHOR_LINE_BYTES = 1 << 13
 _MAX_MATERIAL_JSONL_BYTES = 32 << 20
 _MAX_MATERIAL_LINE_BYTES = 1 << 20
+_MAX_PUBLIC_EVIDENCE_JSONL_BYTES = 4 << 20
+_MAX_PUBLIC_EVIDENCE_LINE_BYTES = 1 << 16
 _MAX_ARTIFACT_BYTES = 1 << 16
 _MAX_PROBE_BYTES = 1 << 16
 _MAX_STATE_READS = 64
@@ -312,6 +322,104 @@ class Workspace100CatalogSet:
         if catalog.to_canonical_bytes() != payload:
             raise ValueError("Workspace-100 catalog set failed canonical round-trip")
         return catalog
+
+
+def workspace100_template_catalog_bytes() -> bytes:
+    """Encode the exact frozen template catalog under its semantic-root payload."""
+
+    payload = canonical_json(
+        {
+            "format": TEMPLATE_CATALOG_FORMAT,
+            "protocol_id": PROTOCOL_ID,
+            "templates": tuple(template.to_payload() for template in TEMPLATES),
+        }
+    )
+    if len(payload) > _MAX_TEMPLATE_CATALOG_BYTES:
+        raise ValueError("Workspace-100 template catalog exceeds its byte bound")
+    return payload
+
+
+def load_workspace100_template_catalog(
+    payload: bytes,
+) -> tuple[TemplateRecord, ...]:
+    """Load only the exact catalog committed by ``template_catalog_digest``."""
+
+    raw = _canonical_object(
+        payload,
+        label="Workspace-100 template catalog",
+        maximum=_MAX_TEMPLATE_CATALOG_BYTES,
+    )
+    _require_closed_fields(
+        raw,
+        {"format", "protocol_id", "templates"},
+        label="Workspace-100 template catalog",
+    )
+    if raw["format"] != TEMPLATE_CATALOG_FORMAT or raw["protocol_id"] != PROTOCOL_ID:
+        raise ValueError("Workspace-100 template catalog identity is unsupported")
+    templates_raw = _required_array(raw, "templates")
+    if len(templates_raw) != _TEMPLATE_COUNT:
+        raise ValueError("Workspace-100 template catalog has the wrong cardinality")
+    templates = tuple(
+        TemplateRecord.from_canonical_bytes(canonical_json(cast(JsonValue, value)))
+        for value in templates_raw
+    )
+    if (
+        templates != TEMPLATES
+        or template_catalog_digest(templates) != template_catalog_digest(TEMPLATES)
+    ):
+        raise ValueError("Workspace-100 template catalog differs from the frozen catalog")
+    if workspace100_template_catalog_bytes() != payload:
+        raise ValueError("Workspace-100 template catalog failed canonical round-trip")
+    return templates
+
+
+def workspace100_variant_catalog_bytes() -> bytes:
+    """Encode the exact frozen variant catalog under its semantic-root payload."""
+
+    payload = canonical_json(
+        {
+            "format": VARIANT_CATALOG_FORMAT,
+            "protocol_id": PROTOCOL_ID,
+            "variants": tuple(variant.to_payload() for variant in VARIANTS),
+        }
+    )
+    if len(payload) > _MAX_VARIANT_CATALOG_BYTES:
+        raise ValueError("Workspace-100 variant catalog exceeds its byte bound")
+    return payload
+
+
+def load_workspace100_variant_catalog(
+    payload: bytes,
+) -> tuple[VariantRecord, ...]:
+    """Load only the exact catalog committed by ``variant_catalog_digest``."""
+
+    raw = _canonical_object(
+        payload,
+        label="Workspace-100 variant catalog",
+        maximum=_MAX_VARIANT_CATALOG_BYTES,
+    )
+    _require_closed_fields(
+        raw,
+        {"format", "protocol_id", "variants"},
+        label="Workspace-100 variant catalog",
+    )
+    if raw["format"] != VARIANT_CATALOG_FORMAT or raw["protocol_id"] != PROTOCOL_ID:
+        raise ValueError("Workspace-100 variant catalog identity is unsupported")
+    variants_raw = _required_array(raw, "variants")
+    if len(variants_raw) != _VARIANT_COUNT:
+        raise ValueError("Workspace-100 variant catalog has the wrong cardinality")
+    variants = tuple(
+        VariantRecord.from_canonical_bytes(canonical_json(cast(JsonValue, value)))
+        for value in variants_raw
+    )
+    if (
+        variants != VARIANTS
+        or variant_catalog_digest(variants) != variant_catalog_digest(VARIANTS)
+    ):
+        raise ValueError("Workspace-100 variant catalog differs from the frozen catalog")
+    if workspace100_variant_catalog_bytes() != payload:
+        raise ValueError("Workspace-100 variant catalog failed canonical round-trip")
+    return variants
 
 
 @dataclass(frozen=True, slots=True)
@@ -722,6 +830,78 @@ class Workspace100VerifiedMaterialSet:
                 "Workspace-100 verified materials failed canonical JSONL round-trip"
             )
         return material_set
+
+
+def workspace100_public_evidence_views_jsonl(
+    material_set: Workspace100VerifiedMaterialSet,
+) -> bytes:
+    """Project and encode the 300 exact public cases from authenticated material."""
+
+    views = _public_evidence_views_for_materials(material_set)
+    if any(type(case) is not PublicEvidenceCase for case in views.cases):
+        raise TypeError("Workspace-100 public evidence requires exact evidence cases")
+    return _encode_jsonl(
+        tuple(case.root_payload() for case in views.cases),
+        maximum=_MAX_PUBLIC_EVIDENCE_JSONL_BYTES,
+        line_maximum=_MAX_PUBLIC_EVIDENCE_LINE_BYTES,
+    )
+
+
+def load_workspace100_public_evidence_views(
+    payload: bytes,
+    material_set: Workspace100VerifiedMaterialSet,
+) -> Workspace100EvidenceViews:
+    """Load cases only when they equal the deterministic material projection."""
+
+    lines = _parse_jsonl(
+        payload,
+        expected_count=_EVIDENCE_CASE_COUNT,
+        label="Workspace-100 public evidence views",
+        maximum=_MAX_PUBLIC_EVIDENCE_JSONL_BYTES,
+        line_maximum=_MAX_PUBLIC_EVIDENCE_LINE_BYTES,
+    )
+    expected = _public_evidence_views_for_materials(material_set)
+    expected_payloads = tuple(case.root_payload() for case in expected.cases)
+    for index, (line, expected_payload) in enumerate(
+        zip(lines, expected_payloads, strict=True)
+    ):
+        _require_closed_fields(
+            line,
+            {
+                "evidence",
+                "evidence_digest",
+                "format",
+                "split",
+                "template_id",
+                "view",
+            },
+            label=f"Workspace-100 public evidence case {index}",
+        )
+        if line["format"] != PUBLIC_EVIDENCE_CASE_FORMAT:
+            raise ValueError("Workspace-100 public evidence case format is unsupported")
+        _require_payload_matches(
+            line,
+            expected_payload,
+            label=f"Workspace-100 public evidence case {index}",
+        )
+    if workspace100_public_evidence_views_jsonl(material_set) != payload:
+        raise ValueError(
+            "Workspace-100 public evidence views failed canonical JSONL round-trip"
+        )
+    return expected
+
+
+def _public_evidence_views_for_materials(
+    material_set: Workspace100VerifiedMaterialSet,
+) -> Workspace100EvidenceViews:
+    if type(material_set) is not Workspace100VerifiedMaterialSet:
+        raise TypeError("public-evidence projection requires an exact verified-material set")
+    material_set.validate()
+    views = workspace100_views._project_verified_materials(material_set.materials)
+    if type(views) is not Workspace100EvidenceViews:
+        raise TypeError("public-evidence projection returned an inexact view set")
+    views.validate()
+    return views
 
 
 def workspace100_source_root(corpus: Workspace100Corpus) -> str:
@@ -1369,6 +1549,7 @@ def _encode_jsonl(
     payloads: tuple[dict[str, JsonValue], ...],
     *,
     maximum: int,
+    line_maximum: int | None = None,
 ) -> bytes:
     if type(payloads) is not tuple:
         raise TypeError("canonical JSONL construction requires an exact tuple")
@@ -1381,6 +1562,10 @@ def _encode_jsonl(
         for line in lines
     ):
         raise ValueError("canonical JSONL lines must be LF-terminated single-line JSON")
+    if line_maximum is not None and any(
+        len(line) > line_maximum for line in lines
+    ):
+        raise ValueError("canonical JSONL line exceeds its byte bound")
     payload = b"".join(lines)
     if not payload or len(payload) > maximum:
         raise ValueError("canonical JSONL payload exceeds its byte bound")
@@ -1404,7 +1589,10 @@ def _parse_jsonl(
     encoded_lines = payload[:-1].split(b"\n")
     if (
         len(encoded_lines) != expected_count
-        or any(not line or len(line) > line_maximum for line in encoded_lines)
+        or any(
+            not line or len(line) + 1 > line_maximum
+            for line in encoded_lines
+        )
     ):
         raise ValueError(f"{label} has the wrong line count or line size")
     return tuple(
@@ -1542,10 +1730,13 @@ __all__ = [
     "CATALOG_SET_FORMAT",
     "GENERATION_PROVENANCE_FORMAT",
     "PROTOCOL_RECORD_FORMAT",
+    "PUBLIC_EVIDENCE_CASE_FORMAT",
     "REGISTRY_SET_FORMAT",
     "SOURCE_OPENING_FORMAT",
     "SOURCE_OPENING_SET_FORMAT",
+    "TEMPLATE_CATALOG_FORMAT",
     "TRUST_ANCHOR_SET_FORMAT",
+    "VARIANT_CATALOG_FORMAT",
     "VERIFIED_MATERIAL_FORMAT",
     "VERIFIED_MATERIAL_SET_FORMAT",
     "Workspace100CatalogSet",
@@ -1554,8 +1745,14 @@ __all__ = [
     "Workspace100RegistrySet",
     "Workspace100TrustAnchorSet",
     "Workspace100VerifiedMaterialSet",
+    "load_workspace100_public_evidence_views",
     "load_workspace100_source_openings",
+    "load_workspace100_template_catalog",
+    "load_workspace100_variant_catalog",
+    "workspace100_public_evidence_views_jsonl",
     "workspace100_source_opening_root",
     "workspace100_source_openings_jsonl",
     "workspace100_source_root",
+    "workspace100_template_catalog_bytes",
+    "workspace100_variant_catalog_bytes",
 ]
