@@ -14,12 +14,13 @@ state, and bounded intervention panel support it. Otherwise it returns
 
 ## The contract
 
-Every diagnosis has one of four forms:
+Every diagnosis has one of five forms:
 
 - `identified_singleton`: one target is shared by every compatible minimal
   repair;
-- `identified_equivalence_class`: the evidence supports a set, but not a
-  unique target;
+- `identified_compound`: one irreducible repair requires multiple targets;
+- `identified_equivalence_class`: multiple alternative minimal repairs remain
+  causally equivalent under the available evidence;
 - `effect_only`: an intervention changes the outcome without localizing the
   original fault;
 - `not_identifiable`: compatible hidden worlds still imply incompatible causal
@@ -72,4 +73,3 @@ WitnessGap is complementary to, rather than an implementation of:
 ## License
 
 Apache-2.0
-

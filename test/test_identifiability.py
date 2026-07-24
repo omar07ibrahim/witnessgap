@@ -8,6 +8,7 @@ from witnessgap.identifiability import (
     CandidateRegistry,
     Evidence,
     EvidenceMismatchError,
+    InterventionObservation,
     ProbeObservation,
     RegistryError,
     VerdictKind,
@@ -65,6 +66,41 @@ def test_informative_probe_turns_unknown_into_identified(world_id: str, target: 
     assert verdict.target_family == ((target,),)
 
 
+@pytest.mark.parametrize(
+    ("world_id", "intervention", "target"),
+    [
+        ("workspace_environment", ("refresh_draft_store",), "environment"),
+        ("workspace_policy", ("repair_draft_selection",), "policy"),
+    ],
+)
+def test_informative_replay_turns_unknown_into_identified(
+    world_id: str,
+    intervention: tuple[str, ...],
+    target: str,
+) -> None:
+    registry = CandidateRegistry.build(workspace_twins())
+    evidence = registry.observe(world_id, interventions=(intervention,))
+
+    verdict = registry.attribute(evidence)
+
+    assert verdict.kind is VerdictKind.IDENTIFIED_SINGLETON
+    assert verdict.compatible_world_ids == (world_id,)
+    assert verdict.target_family == ((target,),)
+
+
+def test_uninformative_replay_preserves_ambiguity() -> None:
+    registry = CandidateRegistry.build(workspace_twins())
+    evidence = registry.observe(
+        "workspace_environment",
+        interventions=(("refresh_draft_store", "repair_draft_selection"),),
+    )
+
+    verdict = registry.attribute(evidence)
+
+    assert verdict.kind is VerdictKind.NOT_IDENTIFIABLE
+    assert len(verdict.compatible_world_ids) == len(workspace_twins())
+
+
 def test_irrelevant_probe_preserves_ambiguity() -> None:
     registry = CandidateRegistry.build(workspace_twins())
     evidence = registry.observe("workspace_environment", probes=("workspace_owner",))
@@ -80,7 +116,6 @@ def test_rejects_evidence_outside_the_declared_world_family() -> None:
     evidence = Evidence(
         public_trace=b"unregistered trace\n",
         outcome=Outcome.FAILURE,
-        state_reads=("draft_store_epoch",),
     )
 
     with pytest.raises(EvidenceMismatchError):
@@ -103,18 +138,30 @@ def test_rejects_an_unknown_or_unsorted_probe_request() -> None:
 class RegistryFixtureWorld:
     world_id: str
     probe_names: tuple[str, ...] = ()
+    repair_mode: str = "singleton"
 
     @property
     def atoms(self) -> tuple[InterventionAtom, ...]:
-        return (InterventionAtom(name="repair", target="tool"),)
+        if self.repair_mode == "singleton":
+            return (InterventionAtom(name="repair", target="tool"),)
+        return (
+            InterventionAtom(name="repair_environment", target="environment"),
+            InterventionAtom(name="repair_tool", target="tool"),
+        )
 
     def probe(self, name: str) -> bytes:
         raise KeyError(name)
 
     def replay(self, interventions: frozenset[str]) -> ReplayResult:
+        if self.repair_mode == "compound":
+            successful = interventions == {"repair_environment", "repair_tool"}
+        elif self.repair_mode == "alternatives":
+            successful = bool(interventions)
+        else:
+            successful = bool(interventions)
         return ReplayResult(
             public_trace=b"failed\n",
-            outcome=Outcome.SUCCESS if interventions else Outcome.FAILURE,
+            outcome=Outcome.SUCCESS if successful else Outcome.FAILURE,
         )
 
 
@@ -135,9 +182,48 @@ def test_probe_values_are_part_of_evidence_identity() -> None:
     forged = Evidence(
         public_trace=genuine.public_trace,
         outcome=genuine.outcome,
-        state_reads=genuine.state_reads,
         probes=(ProbeObservation("draft_store_epoch", b"not a registered observation"),),
     )
 
     with pytest.raises(EvidenceMismatchError):
         registry.attribute(forged)
+
+
+def test_intervention_results_are_part_of_evidence_identity() -> None:
+    registry = CandidateRegistry.build(workspace_twins())
+    genuine = registry.observe(
+        "workspace_policy",
+        interventions=(("repair_draft_selection",),),
+    )
+    forged = Evidence(
+        public_trace=genuine.public_trace,
+        outcome=genuine.outcome,
+        intervention_observations=(
+            InterventionObservation(
+                interventions=("repair_draft_selection",),
+                public_trace=b"forged replay\n",
+                outcome=Outcome.SUCCESS,
+            ),
+        ),
+    )
+
+    with pytest.raises(EvidenceMismatchError):
+        registry.attribute(forged)
+
+
+@pytest.mark.parametrize(
+    ("mode", "kind"),
+    [
+        ("compound", VerdictKind.IDENTIFIED_COMPOUND),
+        ("alternatives", VerdictKind.IDENTIFIED_EQUIVALENCE_CLASS),
+    ],
+)
+def test_distinguishes_compound_from_alternative_repairs(
+    mode: str,
+    kind: VerdictKind,
+) -> None:
+    registry = CandidateRegistry.build((RegistryFixtureWorld("world", repair_mode=mode),))
+
+    verdict = registry.attribute(registry.observe("world"))
+
+    assert verdict.kind is kind

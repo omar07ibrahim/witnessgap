@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
-from witnessgap.model import FiniteWorld, Outcome, TargetFamily
+from witnessgap.model import FiniteWorld, Outcome, TargetFamily, Witness
 from witnessgap.oracle import RepairPanel, enumerate_repair_panel
 
 
@@ -28,14 +28,33 @@ class ProbeObservation:
     value: bytes
 
 
+@dataclass(frozen=True, order=True, slots=True)
+class InterventionObservation:
+    """Public result of one bounded repair query."""
+
+    interventions: Witness
+    public_trace: bytes
+    outcome: Outcome
+
+
 @dataclass(frozen=True, slots=True)
 class Evidence:
     """Evidence visible to an attribution method."""
 
     public_trace: bytes
     outcome: Outcome
-    state_reads: tuple[str, ...]
     probes: tuple[ProbeObservation, ...] = ()
+    intervention_observations: tuple[InterventionObservation, ...] = ()
+
+    def __post_init__(self) -> None:
+        probe_names = tuple(item.name for item in self.probes)
+        if tuple(sorted(set(probe_names))) != probe_names:
+            raise ValueError("probe observations must be unique and sorted by name")
+        intervention_sets = tuple(item.interventions for item in self.intervention_observations)
+        if any(not item or item != tuple(sorted(set(item))) for item in intervention_sets):
+            raise ValueError("intervention queries must be non-empty sorted sets")
+        if tuple(sorted(set(intervention_sets))) != intervention_sets:
+            raise ValueError("intervention observations must be unique and sorted")
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +72,7 @@ class WorldCandidate:
 
 class VerdictKind(StrEnum):
     IDENTIFIED_SINGLETON = "identified_singleton"
+    IDENTIFIED_COMPOUND = "identified_compound"
     IDENTIFIED_EQUIVALENCE_CLASS = "identified_equivalence_class"
     NOT_IDENTIFIABLE = "not_identifiable"
 
@@ -112,7 +132,6 @@ class CandidateRegistry:
                     baseline=Evidence(
                         public_trace=baseline_receipt.result.public_trace,
                         outcome=baseline_receipt.result.outcome,
-                        state_reads=baseline_receipt.result.state_reads,
                     ),
                     probe_observations=probes,
                 )
@@ -127,7 +146,13 @@ class CandidateRegistry:
             raise RegistryError("candidate worlds must be sorted by world ID")
         return cls(candidates=tuple(candidates))
 
-    def observe(self, world_id: str, *, probes: Iterable[str] = ()) -> Evidence:
+    def observe(
+        self,
+        world_id: str,
+        *,
+        probes: Iterable[str] = (),
+        interventions: Iterable[Witness] = (),
+    ) -> Evidence:
         """Construct the evidence view for a sealed world and probe panel."""
 
         candidate = self._candidate(world_id)
@@ -141,11 +166,28 @@ class CandidateRegistry:
             )
         except KeyError as error:
             raise KeyError(f"{world_id}: unknown probe {error.args[0]!r}") from error
+
+        requested_interventions = tuple(interventions)
+        if any(not item or item != tuple(sorted(set(item))) for item in requested_interventions):
+            raise ValueError("requested interventions must be non-empty sorted sets")
+        if tuple(sorted(set(requested_interventions))) != requested_interventions:
+            raise ValueError("requested interventions must be unique and sorted")
+        try:
+            intervention_observations = tuple(
+                InterventionObservation(
+                    interventions=item,
+                    public_trace=candidate.panel.receipt_for(item).result.public_trace,
+                    outcome=candidate.panel.receipt_for(item).result.outcome,
+                )
+                for item in requested_interventions
+            )
+        except KeyError as error:
+            raise KeyError(f"{world_id}: unknown intervention subset {error.args[0]!r}") from error
         return Evidence(
             public_trace=candidate.baseline.public_trace,
             outcome=candidate.baseline.outcome,
-            state_reads=candidate.baseline.state_reads,
             probes=observations,
+            intervention_observations=intervention_observations,
         )
 
     def attribute(self, evidence: Evidence) -> AttributionVerdict:
@@ -188,6 +230,8 @@ class CandidateRegistry:
         kind = (
             VerdictKind.IDENTIFIED_SINGLETON
             if len(profile) == 1 and len(profile[0]) == 1
+            else VerdictKind.IDENTIFIED_COMPOUND
+            if len(profile) == 1
             else VerdictKind.IDENTIFIED_EQUIVALENCE_CLASS
         )
         return AttributionVerdict(
@@ -207,8 +251,19 @@ def _is_compatible(candidate: WorldCandidate, evidence: Evidence) -> bool:
     if candidate.baseline != Evidence(
         public_trace=evidence.public_trace,
         outcome=evidence.outcome,
-        state_reads=evidence.state_reads,
     ):
         return False
     available = {item.name: item.value for item in candidate.probe_observations}
-    return all(available.get(item.name) == item.value for item in evidence.probes)
+    if not all(available.get(item.name) == item.value for item in evidence.probes):
+        return False
+    for observation in evidence.intervention_observations:
+        try:
+            result = candidate.panel.receipt_for(observation.interventions).result
+        except KeyError:
+            return False
+        if (result.public_trace, result.outcome) != (
+            observation.public_trace,
+            observation.outcome,
+        ):
+            return False
+    return True

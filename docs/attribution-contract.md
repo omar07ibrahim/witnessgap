@@ -64,9 +64,13 @@ at least one valid minimal witness.
 
 ### `identified_equivalence_class`
 
-The evidence determines a stable normalized set of admissible targets, but no
-unique target within that set. The set must contain the target implied by every
-world in \(K(e)\).
+The evidence determines the complete family of alternative minimal target
+sets, but no unique member of that family.
+
+### `identified_compound`
+
+Every world in \(K(e)\) has the same single minimal target set and that set
+contains more than one target. Removing any member makes the repair fail.
 
 ### `effect_only`
 
@@ -125,4 +129,3 @@ The first public result is blocked until all of the following hold:
 
 No benchmark accuracy, novelty, or production-causality claim exists before
 these gates pass.
-
