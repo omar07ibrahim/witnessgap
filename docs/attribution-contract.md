@@ -143,11 +143,11 @@ field of the verdict. The serialized record has a closed parser and is checked
 against an independently supplied proof root. This is an integrity commitment,
 not a digital signature or proof that the finite family is complete.
 
-The Workspace adapter routes all post-intervention tool-execution reads through
-its recording-state capability, and the artifact validator independently
-recomputes the expected log. Intervention application itself remains part of
-the audited adapter semantics; the contract does not claim that Python can
-instrument arbitrary third-party state access.
+The built-in Workspace adapters route all post-intervention tool-execution
+reads through their recording-state capabilities, and each artifact validator
+independently recomputes the expected log. Intervention application itself
+remains part of the audited adapter semantics; the contract does not claim that
+Python can instrument arbitrary third-party state access.
 
 ## 6. Vertical-slice release gates
 

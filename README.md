@@ -102,14 +102,20 @@ trace/terminal/read-log artifact, and binds the result to externally pinned
 registry, adapter, and verifier digests. Search-time `minimal_witnesses` and
 `target_family` caches are outside that verifier's trust path.
 
-The authored Workspace-100 layer now defines five closed templates, 50 explicit
-variants, and a deterministic generator for 100 salted source openings. It
-validates the twin intervention matrix, global identity uniqueness, canonical
-round-trips, and participant-visible leakage without claiming an evaluated
-result.
+The Workspace-100 layer now defines five closed templates, 50 explicit
+variants, and a deterministic generator for 100 salted source openings. Its
+closed runtime adapter accepts only exact authored source records, routes every
+task read through a recording-state capability, and validates the complete
+artifact against a fresh decode. Corpus-wide tests independently verify all
+100 panels: 400 unique receipts, 800 runner executions, and 1,000 source
+decodes. An adversarial suite also rejects field-level trace, terminal,
+state-log, intervention, and cross-twin artifact splices.
 
-The next release gate is a separate trusted Workspace-100 runtime adapter that
-can reconstruct and independently verify all 50 committed twin registries.
+This is runtime verification, not a benchmark result. The next release gate is
+the capability-separated evidence worker, deterministic evaluator, and
+seed-provenance release record. Participant code must not receive the full
+WitnessGap package because it contains the authored catalog and sealed-source
+generator.
 
 See [the attribution contract](docs/attribution-contract.md) for the current
 formal boundary, [the threat model](docs/threat-model.md) for the trusted

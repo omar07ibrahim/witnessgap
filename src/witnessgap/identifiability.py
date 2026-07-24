@@ -7,11 +7,13 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from witnessgap.canonical import JsonValue, canonical_digest, canonical_json
 from witnessgap.model import FiniteWorld, InterventionAtom, Outcome, TargetFamily, Witness
-from witnessgap.oracle import RepairPanel, enumerate_repair_panel
+
+if TYPE_CHECKING:
+    from witnessgap.oracle import RepairPanel
 
 _REGISTRY_FORMAT = "witnessgap.registry.v2"
 _SHA256_HEX_LENGTH = 64
@@ -718,6 +720,9 @@ def _family_contract(world: ProbeWorld) -> tuple[object, ...]:
 
 
 def _validated_panel(world: ProbeWorld) -> RepairPanel:
+    # Keep the search oracle outside verifier-only import and trust paths.
+    from witnessgap.oracle import enumerate_repair_panel  # noqa: PLC0415
+
     panel = enumerate_repair_panel(world)
     undeclared_reads = {
         channel

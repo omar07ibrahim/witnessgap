@@ -15,12 +15,14 @@ from witnessgap.workspace100.generation import (
     GeneratedCompletion,
     GeneratedPair,
     Workspace100Corpus,
+    authored_completion_records,
     construction_matrix,
     generate_workspace100,
 )
 from witnessgap.workspace100.records import (
     CompletionSourceRecord,
     Split,
+    TemplateId,
 )
 
 _SEED = bytes.fromhex("713d96c0fcadb930599f4f4370df3484766872ac406f1c26c5a360a996f29ec5")
@@ -131,6 +133,26 @@ def test_every_pair_satisfies_the_frozen_twin_matrix(
         assert sorted(matrix[1] for matrix in matrices) == sorted((intended, observed))
         assert sorted(matrix[2] for matrix in matrices) == sorted((intended, observed))
         assert all(matrix[3] == intended for matrix in matrices)
+
+
+def test_authored_record_lookup_returns_only_the_frozen_pair(
+    corpus: Workspace100Corpus,
+) -> None:
+    for pair in corpus.pairs:
+        records = authored_completion_records(pair.template_id, pair.variant_id)
+
+        assert sorted(record.to_canonical_bytes() for record in records) == sorted(
+            completion.source.source_bytes for completion in pair.completions
+        )
+
+
+def test_authored_record_lookup_rejects_unknown_and_inexact_keys() -> None:
+    with pytest.raises(KeyError, match="publish_draft/v99"):
+        authored_completion_records(TemplateId.PUBLISH_DRAFT, "v99")
+    with pytest.raises(TypeError, match="exact TemplateId"):
+        authored_completion_records(cast(TemplateId, "publish_draft"), "v00")
+    with pytest.raises(TypeError, match="exact string"):
+        authored_completion_records(TemplateId.PUBLISH_DRAFT, cast(str, b"v00"))
 
 
 def test_sources_have_closed_round_trips_without_side_labels(
