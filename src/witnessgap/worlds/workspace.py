@@ -37,9 +37,11 @@ _STATE_CHANNELS = ("draft_store_epoch", "policy_selection")
 _SOURCE_FORMAT = "witnessgap.workspace-source.v1"
 _ADAPTER_ID = "workspace_release_notes_v1"
 _ADAPTER_IMPLEMENTATION_PATHS = (
+    "__init__.py",
     "canonical.py",
     "model.py",
     "source.py",
+    "worlds/__init__.py",
     "worlds/workspace.py",
 )
 _SOURCE_SALTS = {

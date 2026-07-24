@@ -44,6 +44,7 @@ _IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _PAIR_SIZE = 2
 _MIN_ALTERNATIVES = 2
 _VERIFIER_IMPLEMENTATION_PATHS = (
+    "__init__.py",
     "adapters.py",
     "canonical.py",
     "identifiability.py",

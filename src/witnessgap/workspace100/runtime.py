@@ -34,6 +34,7 @@ _ENVIRONMENT_TARGET = "environment"
 _POLICY_TARGET = "policy"
 _WORLD_ID_DIGEST_CHARACTERS = 24
 _ADAPTER_IMPLEMENTATION_PATHS = (
+    "__init__.py",
     "canonical.py",
     "model.py",
     "source.py",

@@ -17,8 +17,11 @@ For the current vertical slice, a verifier operator trusts:
 - the procedure that keeps sealed sources and labels outside the participant
   process.
 
-The adapter registry is closed. A claim may name an adapter ID, but cannot
-supply an adapter object or executable world object.
+The adapter registry is closed. It matches a literal built-in ID before lazily
+importing only that adapter's digest-bound module closure; an unselected
+adapter does not execute. A claim may name an adapter ID, but cannot supply an
+adapter object or executable world object. Importing the verifier alone also
+does not load the search oracle.
 
 ## Untrusted inputs
 
