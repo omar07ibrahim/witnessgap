@@ -40,6 +40,12 @@ from witnessgap.worlds.workspace import workspace_twins
 _DIGEST_A = "a" * 64
 _DIGEST_B = "b" * 64
 _SHA256_HEX_LENGTH = 64
+_EXPECTED_WORKER_IMPLEMENTATION_DIGEST = (
+    "4c4a555930de0290d61d9924d0b3dd391544aebebf709b5de152dabd3e4a13f6"
+)
+_EXPECTED_STANDALONE_RUN_DIGEST = (
+    "ace50175c3bdfb36a7a9af1000022e0d80b003d694a62a3c92422211e79aa635"
+)
 _UNKNOWN_CLAIM = ParticipantClaim(
     kind=VerdictKind.NOT_IDENTIFIABLE,
     unknown_reason=UnknownReason.AMBIGUOUS_WORLDS,
@@ -526,6 +532,8 @@ def test_worker_run_record_is_a_closed_canonical_union(
 
 def test_worker_run_record_rejects_incoherent_and_mutated_values() -> None:
     record = _standalone_claimed_record()
+    assert record.run_digest == _EXPECTED_STANDALONE_RUN_DIGEST
+
     with pytest.raises(ValueError, match="cannot contain a failure"):
         replace(
             record,
@@ -654,7 +662,10 @@ def test_harness_faults_abort_instead_of_becoming_method_failures(
 def test_worker_submodule_does_not_change_the_adapter_digest() -> None:
     before = workspace100_adapter_implementation_digest()
 
-    assert worker_module.workspace100_worker_implementation_digest()
+    assert (
+        worker_module.workspace100_worker_implementation_digest()
+        == _EXPECTED_WORKER_IMPLEMENTATION_DIGEST
+    )
 
     assert workspace100_adapter_implementation_digest() == before
 
