@@ -6,7 +6,7 @@
   "sources": [
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "b443304c71d25985a1446fc5a5c3841638d41615cd6662f0b96d7cd12e2c08e5"
+      "sha256": "93ba7115ca4a969ee58fdad6215bfe0da80b4b4e82fdcc6c94705217b42d663b"
     },
     {
       "path": ".python-version",
@@ -18,7 +18,7 @@
     },
     {
       "path": "pyproject.toml",
-      "sha256": "334bf6886ef4a5f7ca8eb0aa6fb6b2dec239308d4a9997bc2966acd967c0f530"
+      "sha256": "0544da9e8ce7510835bc22d2dc3b77fe6f92010ebd32d56e4d35bed10060f6d6"
     },
     {
       "path": "requirements-dev.lock",
@@ -74,7 +74,7 @@
     },
     {
       "path": "tools/render_readme_visuals.py",
-      "sha256": "e70d3696ef81ea3c1686b9adea0fbc8074cd338bb53ebd68580c3afd78256af3"
+      "sha256": "15d2cba8496e5eda335febb0f67dde1646849a5bf07e5ac346fbf9d9e2652776"
     },
     {
       "path": "tools/workspace100_candidate_evidence.py",
@@ -878,20 +878,26 @@
       "title": "Workspace-100 candidate artifact inventory and exact sizes"
     },
     {
-      "description": "A source-derived setup flow from the pinned Python version, exact hashed development lock, package metadata, and current GitHub Actions workflow. The workflow installs the editable package and runs lint, strict typing, and tests. A separate red panel lists evidence, visual, tools, and explicit CLI checks that are not currently in CI.",
+      "description": "A source-derived setup flow from the pinned Python version, exact hashed development lock, package metadata, and current GitHub Actions workflow. CI installs the editable package, checks source, tests, and tools with Ruff and strict mypy, validates candidate evidence and README visuals, smoke-tests the installed CLI, and runs pytest. The boundary panel states what these local gates do not establish.",
       "facts": {
         "build_requirement": "hatchling==1.27.0",
         "ci_check_commands": [
-          "ruff check src test",
-          "mypy --strict src test",
+          "ruff check src test tools",
+          "mypy --strict src test tools",
           "pytest"
         ],
         "ci_install_commands": [
           "python -m pip install --require-hashes -r requirements-dev.lock",
           "python -m pip install --no-deps --no-build-isolation --editable ."
         ],
+        "ci_reproducibility_commands": [
+          "python tools/workspace100_candidate_evidence.py check",
+          "python tools/render_readme_visuals.py check",
+          "witnessgap example"
+        ],
         "console_entrypoint": "witnessgap.cli:main",
         "console_script": "witnessgap",
+        "current_ci_omission_count": 0,
         "lock_hash_count": 16,
         "locked_package_count": 16,
         "locked_packages": [
@@ -912,24 +918,18 @@
           "trove-classifiers==2026.6.1.19",
           "typing-extensions==4.16.0"
         ],
-        "missing_ci_commands": [
-          "ruff check tools",
-          "mypy --strict tools",
-          "python tools/workspace100_candidate_evidence.py check",
-          "python tools/render_readme_visuals.py check",
-          "witnessgap example  # explicit CLI smoke"
-        ],
+        "missing_ci_commands": [],
         "python_version": "3.12.3",
         "requires_python": ">=3.12"
       },
       "file": "verification-flow.svg",
       "nonclaims": [
-        "Candidate evidence and README visual checks are not currently CI gates.",
-        "The current explicit lint and type-check scopes omit tools/.",
-        "The current CI has no explicit installed-console-script smoke command."
+        "Local drift pins and content digests are not independent external authentication.",
+        "The installed CLI smoke check does not replay the full 1,200-run candidate capture.",
+        "The local process backend is not a hostile-code sandbox."
       ],
       "official": false,
-      "sha256": "4457c522bcdba84970fcdf87e39b985e7d7345198c5f65d48a113a9a700745a3",
+      "sha256": "63424000d0926063ece237a169e81222afc9c9fda2c94b19e22aa895b53e17ee",
       "source_paths": [
         ".github/workflows/ci.yml",
         ".python-version",
@@ -939,7 +939,7 @@
       "source_records": [
         {
           "path": ".github/workflows/ci.yml",
-          "sha256": "b443304c71d25985a1446fc5a5c3841638d41615cd6662f0b96d7cd12e2c08e5"
+          "sha256": "93ba7115ca4a969ee58fdad6215bfe0da80b4b4e82fdcc6c94705217b42d663b"
         },
         {
           "path": ".python-version",
@@ -947,7 +947,7 @@
         },
         {
           "path": "pyproject.toml",
-          "sha256": "334bf6886ef4a5f7ca8eb0aa6fb6b2dec239308d4a9997bc2966acd967c0f530"
+          "sha256": "0544da9e8ce7510835bc22d2dc3b77fe6f92010ebd32d56e4d35bed10060f6d6"
         },
         {
           "path": "requirements-dev.lock",

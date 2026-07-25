@@ -36,7 +36,7 @@ packages = ["src/witnessgap"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src", "test"]
+files = ["src", "test", "tools"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"

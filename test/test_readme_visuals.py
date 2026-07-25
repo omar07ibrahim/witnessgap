@@ -171,7 +171,7 @@ def test_candidate_result_transcript_and_inventory_visual_facts_are_exact() -> N
     assert inventory[-1]["path"] == "release-manifest.json"
 
 
-def test_verification_flow_records_current_ci_and_explicit_omissions() -> None:
+def test_verification_flow_records_current_ci_gates_and_boundaries() -> None:
     by_file = _records_by_file()
     setup_record = by_file["verification-flow.svg"]
     setup_facts = _object(setup_record["facts"])
@@ -180,16 +180,21 @@ def test_verification_flow_records_current_ci_and_explicit_omissions() -> None:
     assert setup_facts["lock_hash_count"] == EXPECTED_LOCKED_PACKAGE_COUNT
     assert setup_facts["console_entrypoint"] == "witnessgap.cli:main"
     assert setup_facts["ci_check_commands"] == [
-        "ruff check src test",
-        "mypy --strict src test",
+        "ruff check src test tools",
+        "mypy --strict src test tools",
         "pytest",
     ]
-    assert setup_facts["missing_ci_commands"] == [
-        "ruff check tools",
-        "mypy --strict tools",
+    assert setup_facts["ci_reproducibility_commands"] == [
         "python tools/workspace100_candidate_evidence.py check",
         "python tools/render_readme_visuals.py check",
-        "witnessgap example  # explicit CLI smoke",
+        "witnessgap example",
+    ]
+    assert setup_facts["current_ci_omission_count"] == 0
+    assert setup_facts["missing_ci_commands"] == []
+    assert setup_record["nonclaims"] == [
+        "Local drift pins and content digests are not independent external authentication.",
+        "The installed CLI smoke check does not replay the full 1,200-run candidate capture.",
+        "The local process backend is not a hostile-code sandbox.",
     ]
     assert {
         cast(str, _object(item)["path"]) for item in _array(setup_record["source_records"])

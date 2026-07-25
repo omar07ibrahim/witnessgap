@@ -40,10 +40,19 @@ jobs:
           python -m pip install --no-deps --no-build-isolation --editable .
 
       - name: Lint
-        run: ruff check src test
+        run: ruff check src test tools
 
       - name: Type check
-        run: mypy --strict src test
+        run: mypy --strict src test tools
+
+      - name: Verify candidate evidence
+        run: python tools/workspace100_candidate_evidence.py check
+
+      - name: Verify README visuals
+        run: python tools/render_readme_visuals.py check
+
+      - name: Smoke test installed CLI
+        run: witnessgap example
 
       - name: Test
         run: pytest

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1160" viewBox="0 0 1600 1160" role="img" aria-labelledby="visual-title visual-description">
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200" role="img" aria-labelledby="visual-title visual-description">
   <title id="visual-title">Reproducible setup and current verification coverage</title>
-  <desc id="visual-description">A source-derived setup flow from the pinned Python version, exact hashed development lock, package metadata, and current GitHub Actions workflow. The workflow installs the editable package and runs lint, strict typing, and tests. A separate red panel lists evidence, visual, tools, and explicit CLI checks that are not currently in CI.</desc>
-  <rect x="0" y="0" width="1600" height="1160" fill="#08111f"/>
+  <desc id="visual-description">A source-derived setup flow from the pinned Python version, exact hashed development lock, package metadata, and current GitHub Actions workflow. CI installs the editable package, checks source, tests, and tools with Ruff and strict mypy, validates candidate evidence and README visuals, smoke-tests the installed CLI, and runs pytest. The boundary panel states what these local gates do not establish.</desc>
+  <rect x="0" y="0" width="1600" height="1200" fill="#08111f"/>
   <text x="60" y="52" fill="#58d6c9" font-family="monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="2">WITNESSGAP / COMMITTED SETUP CONTRACT</text>
   <text x="60" y="98" fill="#f4f7fb" font-family="monospace" font-size="34" font-weight="700" text-anchor="start" letter-spacing="0">Pinned runtime → hashed install → editable CLI → current CI</text>
-  <text x="60" y="132" fill="#afc2d8" font-family="monospace" font-size="18" font-weight="400" text-anchor="start" letter-spacing="0">Green/blue stages are configured today; the red panel records current CI omissions.</text>
+  <text x="60" y="132" fill="#afc2d8" font-family="monospace" font-size="18" font-weight="400" text-anchor="start" letter-spacing="0">Every listed gate is configured today; explicit trust and isolation boundaries remain.</text>
   <rect x="60" y="180" width="340" height="240" rx="18" fill="#111f33" stroke="#6eb7ff" stroke-width="2"/>
   <text x="84" y="219" fill="#6eb7ff" font-family="monospace" font-size="13" font-weight="700" text-anchor="start" letter-spacing="1">01 · RUNTIME</text>
   <text x="84" y="270" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0">.python-version = 3.12.3</text>
@@ -29,35 +29,38 @@
   <polygon points="1200,300 1187,292 1187,308" fill="#58d6c9"/>
   <rect x="1200" y="180" width="340" height="240" rx="18" fill="#111f33" stroke="#82e39c" stroke-width="2"/>
   <text x="1224" y="219" fill="#82e39c" font-family="monospace" font-size="13" font-weight="700" text-anchor="start" letter-spacing="1">04 · CURRENT CI</text>
-  <text x="1224" y="270" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0">lint: src + test</text>
-  <text x="1224" y="312" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0">strict types: src + test</text>
+  <text x="1224" y="270" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0">lint/type: src + test + tools</text>
+  <text x="1224" y="312" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0">3 reproducibility gates</text>
   <text x="1224" y="354" fill="#f4f7fb" font-family="monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0">pytest: configured test suite</text>
-  <rect x="60" y="470" width="720" height="460" rx="18" fill="#0e2630" stroke="#82e39c" stroke-width="2"/>
-  <text x="88" y="510" fill="#82e39c" font-family="monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0">CURRENT CI · EXACT COMMANDS</text>
+  <rect x="60" y="470" width="720" height="445" rx="18" fill="#0e2630" stroke="#82e39c" stroke-width="2"/>
+  <text x="88" y="510" fill="#82e39c" font-family="monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0">CURRENT CI · INSTALL + QUALITY</text>
   <text x="88" y="552" fill="#58d6c9" font-family="monospace" font-size="12" font-weight="700" text-anchor="start" letter-spacing="0">HASH-LOCKED INSTALL</text>
   <text x="88" y="584" fill="#f4f7fb" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">python -m pip install --require-hashes -r requirements-dev.lock</text>
   <text x="88" y="615" fill="#f4f7fb" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">python -m pip install --no-deps --no-build-isolation --editable .</text>
   <text x="88" y="680" fill="#58d6c9" font-family="monospace" font-size="12" font-weight="700" text-anchor="start" letter-spacing="0">QUALITY CHECKS</text>
-  <text x="88" y="714" fill="#f4f7fb" font-family="monospace" font-size="17" font-weight="700" text-anchor="start" letter-spacing="0">ruff check src test</text>
-  <text x="88" y="756" fill="#f4f7fb" font-family="monospace" font-size="17" font-weight="700" text-anchor="start" letter-spacing="0">mypy --strict src test</text>
+  <text x="88" y="714" fill="#f4f7fb" font-family="monospace" font-size="17" font-weight="700" text-anchor="start" letter-spacing="0">ruff check src test tools</text>
+  <text x="88" y="756" fill="#f4f7fb" font-family="monospace" font-size="17" font-weight="700" text-anchor="start" letter-spacing="0">mypy --strict src test tools</text>
   <text x="88" y="798" fill="#f4f7fb" font-family="monospace" font-size="17" font-weight="700" text-anchor="start" letter-spacing="0">pytest</text>
-  <text x="88" y="862" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">CI source scope is literal: src + test.</text>
+  <text x="88" y="862" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">CI source scope is literal: src + test + tools.</text>
   <text x="88" y="889" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">pytest discovers test/ from pyproject.toml.</text>
-  <rect x="820" y="470" width="720" height="460" rx="18" fill="#2b1d28" stroke="#ff7b86" stroke-width="2"/>
-  <text x="848" y="510" fill="#ff7b86" font-family="monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0">NOT IN CURRENT CI · EXPLICIT OMISSIONS</text>
-  <text x="848" y="558" fill="#ffd7db" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">tools/ is absent from explicit Ruff scope</text>
-  <text x="848" y="601" fill="#ffd7db" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">tools/ is absent from explicit mypy scope</text>
-  <text x="848" y="644" fill="#ffd7db" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">candidate evidence check is not invoked</text>
-  <text x="848" y="687" fill="#ffd7db" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">README visual freshness check is not invoked</text>
-  <text x="848" y="730" fill="#ffd7db" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">console-script smoke command is not invoked</text>
-  <text x="848" y="795" fill="#ffd166" font-family="monospace" font-size="12" font-weight="700" text-anchor="start" letter-spacing="0">REPRODUCIBLE LOCAL COMMANDS</text>
-  <text x="848" y="830" fill="#f4f7fb" font-family="monospace" font-size="13" font-weight="400" text-anchor="start" letter-spacing="0">python tools/workspace100_candidate_evidence.py check</text>
-  <text x="848" y="863" fill="#f4f7fb" font-family="monospace" font-size="13" font-weight="400" text-anchor="start" letter-spacing="0">python tools/render_readme_visuals.py check</text>
-  <rect x="60" y="960" width="1480" height="70" rx="12" fill="#111f33" stroke="#2d4665" stroke-width="2"/>
-  <text x="88" y="1004" fill="#afc2d8" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">lock coverage: 16 package pins / 16 hashes  ·  console script: witnessgap = witnessgap.cli:main</text>
-  <line x1="60" y1="1074" x2="1540" y2="1074" stroke="#2d4665" stroke-width="2" stroke-linecap="round"/>
-  <rect x="60" y="1092" width="170" height="42" rx="21" fill="#2b1d28" stroke="#ff7b86" stroke-width="2"/>
-  <text x="145" y="1120" fill="#ffd7db" font-family="monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0">official: false</text>
-  <text x="250" y="1108" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">source: .python-version · requirements-dev.lock · pyproject.toml · ci.yml</text>
-  <text x="250" y="1132" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">nonclaim: diagram distinguishes configured CI from reproducible checks not yet wired into CI</text>
+  <rect x="820" y="470" width="720" height="445" rx="18" fill="#211c37" stroke="#b8a1ff" stroke-width="2"/>
+  <text x="848" y="510" fill="#b8a1ff" font-family="monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0">CURRENT CI · REPRODUCIBILITY GATES</text>
+  <text x="848" y="558" fill="#58d6c9" font-family="monospace" font-size="12" font-weight="700" text-anchor="start" letter-spacing="0">01 · CANDIDATE RECEIPT LOCAL-DRIFT CHECK</text>
+  <text x="848" y="597" fill="#f4f7fb" font-family="monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0">python tools/workspace100_candidate_evidence.py check</text>
+  <text x="848" y="663" fill="#6eb7ff" font-family="monospace" font-size="12" font-weight="700" text-anchor="start" letter-spacing="0">02 · README VISUAL SOURCE FRESHNESS</text>
+  <text x="848" y="702" fill="#f4f7fb" font-family="monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0">python tools/render_readme_visuals.py check</text>
+  <text x="848" y="768" fill="#82e39c" font-family="monospace" font-size="12" font-weight="700" text-anchor="start" letter-spacing="0">03 · INSTALLED CONSOLE ENTRYPOINT</text>
+  <text x="848" y="807" fill="#f4f7fb" font-family="monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0">witnessgap example</text>
+  <rect x="848" y="852" width="410" height="42" rx="21" fill="#163022" stroke="#82e39c" stroke-width="2"/>
+  <text x="1053" y="880" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0">3 / 3 present in current CI</text>
+  <rect x="60" y="950" width="1480" height="120" rx="12" fill="#2b1d28" stroke="#ff7b86" stroke-width="2"/>
+  <text x="88" y="988" fill="#ff7b86" font-family="monospace" font-size="13" font-weight="700" text-anchor="start" letter-spacing="0">BOUNDARIES THESE CI GATES DO NOT CHANGE</text>
+  <text x="88" y="1030" fill="#ffd7db" font-family="monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0">local root pins ≠ external authentication</text>
+  <text x="578" y="1030" fill="#ffd7db" font-family="monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0">CLI smoke ≠ full 1,200-run candidate capture</text>
+  <text x="1068" y="1030" fill="#ffd7db" font-family="monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0">local backend ≠ hostile-code sandbox</text>
+  <line x1="60" y1="1114" x2="1540" y2="1114" stroke="#2d4665" stroke-width="2" stroke-linecap="round"/>
+  <rect x="60" y="1132" width="170" height="42" rx="21" fill="#2b1d28" stroke="#ff7b86" stroke-width="2"/>
+  <text x="145" y="1160" fill="#ffd7db" font-family="monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0">official: false</text>
+  <text x="250" y="1148" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">source: .python-version · requirements-dev.lock · pyproject.toml · ci.yml</text>
+  <text x="250" y="1172" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">nonclaim: local gates do not establish external auth, full capture replay, or sandboxing</text>
 </svg>
