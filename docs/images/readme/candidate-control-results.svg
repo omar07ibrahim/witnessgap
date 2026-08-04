@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1600 1120" role="img" aria-labelledby="visual-title visual-description">
+  <title id="visual-title">Built-in control outcomes on the validated Workspace-100 candidate</title>
+  <desc id="visual-description">Grouped horizontal bars show exact decisive-coverage and false-certainty-incidence rates for four frozen rule-based controls in the validated development candidate. The controls are descriptive protocol checks, not competitive systems. All 1,200 worker runs produced claims and zero worker failures.</desc>
+  <rect x="0" y="0" width="1600" height="1120" fill="#08111f"/>
+  <text x="60" y="52" fill="#58d6c9" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="2" textLength="439" lengthAdjust="spacingAndGlyphs">WORKSPACE-100 / EXACT CANDIDATE RECEIPT</text>
+  <text x="60" y="98" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="34" font-weight="700" text-anchor="start" letter-spacing="0" textLength="1223" lengthAdjust="spacingAndGlyphs">Built-in control outcomes on 300 participant-visible cases</text>
+  <text x="60" y="132" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="18" font-weight="400" text-anchor="start" letter-spacing="0" textLength="938" lengthAdjust="spacingAndGlyphs">Four frozen rule-based controls for protocol interpretation — not competing systems.</text>
+  <rect x="60" y="170" width="1480" height="120" rx="18" fill="#0e2630" stroke="#58d6c9" stroke-width="2"/>
+  <text x="88" y="208" fill="#58d6c9" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0" textLength="217" lengthAdjust="spacingAndGlyphs">VALIDATED EXECUTION SCOPE</text>
+  <text x="88" y="250" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="25" font-weight="700" text-anchor="start" letter-spacing="0" textLength="744" lengthAdjust="spacingAndGlyphs">1,200 worker runs  ·  1,200 claimed  ·  0 failed</text>
+  <rect x="1160" y="208" width="340" height="42" rx="21" fill="#152842" stroke="#ffd166" stroke-width="2"/>
+  <text x="1330" y="236" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0" textLength="298" lengthAdjust="spacingAndGlyphs">controls ≠ competitive systems</text>
+  <text x="60" y="340" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="13" font-weight="700" text-anchor="start" letter-spacing="0" textLength="113" lengthAdjust="spacingAndGlyphs">FROZEN CONTROL</text>
+  <text x="470" y="340" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="13" font-weight="400" text-anchor="middle" letter-spacing="0" textLength="9" lengthAdjust="spacingAndGlyphs">0</text>
+  <text x="730" y="340" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="13" font-weight="400" text-anchor="middle" letter-spacing="0" textLength="25" lengthAdjust="spacingAndGlyphs">1/3</text>
+  <text x="990" y="340" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="13" font-weight="400" text-anchor="middle" letter-spacing="0" textLength="25" lengthAdjust="spacingAndGlyphs">2/3</text>
+  <text x="1250" y="340" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="13" font-weight="400" text-anchor="middle" letter-spacing="0" textLength="9" lengthAdjust="spacingAndGlyphs">1</text>
+  <text x="1280" y="340" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="13" font-weight="700" text-anchor="start" letter-spacing="0" textLength="194" lengthAdjust="spacingAndGlyphs">EXACT OBSERVED = REDUCED</text>
+  <rect x="60" y="360" width="330" height="42" rx="21" fill="#172b43" stroke="#6eb7ff" stroke-width="2"/>
+  <text x="225" y="388" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0" textLength="169" lengthAdjust="spacingAndGlyphs">decisive coverage</text>
+  <rect x="60" y="410" width="330" height="42" rx="21" fill="#2b1d28" stroke="#ff7b86" stroke-width="2"/>
+  <text x="225" y="438" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0" textLength="248" lengthAdjust="spacingAndGlyphs">false-certainty incidence</text>
+  <rect x="60" y="458" width="1480" height="108" rx="12" fill="#111f33" stroke="#2d4665" stroke-width="2"/>
+  <text x="88" y="505" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0" textLength="157" lengthAdjust="spacingAndGlyphs">always_unknown</text>
+  <rect x="470" y="479" width="780" height="22" rx="6" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <text x="1280" y="496" fill="#6eb7ff" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0" textLength="103" lengthAdjust="spacingAndGlyphs">0/300 = 0/1</text>
+  <rect x="470" y="518" width="780" height="22" rx="6" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <text x="1280" y="535" fill="#ff7b86" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0" textLength="103" lengthAdjust="spacingAndGlyphs">0/300 = 0/1</text>
+  <rect x="60" y="583" width="1480" height="108" rx="12" fill="#111f33" stroke="#2d4665" stroke-width="2"/>
+  <text x="88" y="630" fill="#ffd166" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0" textLength="201" lengthAdjust="spacingAndGlyphs">forced_environment</text>
+  <rect x="470" y="604" width="780" height="22" rx="6" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <rect x="470" y="604" width="780" height="22" rx="6" fill="#6eb7ff" stroke="#6eb7ff" stroke-width="1"/>
+  <text x="1280" y="621" fill="#6eb7ff" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0" textLength="121" lengthAdjust="spacingAndGlyphs">300/300 = 1/1</text>
+  <rect x="470" y="643" width="780" height="22" rx="6" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <rect x="470" y="643" width="520" height="22" rx="6" fill="#ff7b86" stroke="#ff7b86" stroke-width="1"/>
+  <text x="1280" y="660" fill="#ff7b86" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0" textLength="121" lengthAdjust="spacingAndGlyphs">200/300 = 2/3</text>
+  <rect x="60" y="708" width="1480" height="108" rx="12" fill="#111f33" stroke="#2d4665" stroke-width="2"/>
+  <text x="88" y="755" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0" textLength="224" lengthAdjust="spacingAndGlyphs">refresh_success_only</text>
+  <rect x="470" y="729" width="780" height="22" rx="6" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <rect x="470" y="729" width="130" height="22" rx="6" fill="#6eb7ff" stroke="#6eb7ff" stroke-width="1"/>
+  <text x="1280" y="746" fill="#6eb7ff" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0" textLength="112" lengthAdjust="spacingAndGlyphs">50/300 = 1/6</text>
+  <rect x="470" y="768" width="780" height="22" rx="6" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <text x="1280" y="785" fill="#ff7b86" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0" textLength="103" lengthAdjust="spacingAndGlyphs">0/300 = 0/1</text>
+  <rect x="60" y="833" width="1480" height="108" rx="12" fill="#111f33" stroke="#2d4665" stroke-width="2"/>
+  <text x="88" y="880" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0" textLength="168" lengthAdjust="spacingAndGlyphs">refresh_outcome</text>
+  <rect x="470" y="854" width="780" height="22" rx="6" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <rect x="470" y="854" width="260" height="22" rx="6" fill="#6eb7ff" stroke="#6eb7ff" stroke-width="1"/>
+  <text x="1280" y="871" fill="#6eb7ff" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0" textLength="121" lengthAdjust="spacingAndGlyphs">100/300 = 1/3</text>
+  <rect x="470" y="893" width="780" height="22" rx="6" fill="#0b1728" stroke="#2d4665" stroke-width="1"/>
+  <text x="1280" y="910" fill="#ff7b86" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0" textLength="103" lengthAdjust="spacingAndGlyphs">0/300 = 0/1</text>
+  <rect x="60" y="965" width="1480" height="58" rx="12" fill="#211c37" stroke="#b8a1ff" stroke-width="2"/>
+  <text x="88" y="1002" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0" textLength="726" lengthAdjust="spacingAndGlyphs">receipt_root: 668d2093bef503c0c43300f586427124863d59fc5b75d223d2396fb28da6f313</text>
+  <line x1="60" y1="1034" x2="1540" y2="1034" stroke="#2d4665" stroke-width="2" stroke-linecap="round"/>
+  <rect x="60" y="1052" width="170" height="42" rx="21" fill="#2b1d28" stroke="#ff7b86" stroke-width="2"/>
+  <text x="145" y="1080" fill="#ffd7db" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0" textLength="149" lengthAdjust="spacingAndGlyphs">official: false</text>
+  <text x="250" y="1068" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0" textLength="591" lengthAdjust="spacingAndGlyphs">source: docs/evidence/workspace100-candidate-receipt.json · scores[]</text>
+  <text x="250" y="1092" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0" textLength="816" lengthAdjust="spacingAndGlyphs">nonclaim: development candidate; exact control outcomes are not external benchmark comparisons</text>
+</svg>

@@ -256,11 +256,48 @@ All omitted categories are zero. The corresponding overall exact rates are:
 | `refresh_outcome` | 1/3 | 0 | 0 | 0 | 1 | 1/2 | 1/2 |
 
 These are measured deterministic regression results for the reviewed built-in
-programs. They are not yet a materialized public benchmark release. Release
-gates for clean-run reproducibility, a manifest, provenance, and hostile-code
-isolation remain separate.
+programs. They are not a published public benchmark release. The repository
+implements candidate manifest, provenance, materialization, and semantic
+replay machinery; two clean honest-runtime captures, an independently
+authenticated release root, and hostile-code isolation remain separate release
+requirements.
+
+## Runtime-bound development candidate
+
+One successful development capture ran the actual four frozen programs for all
+1,200 method/case keys using CPython 3.12.3 on Linux x86_64. The resolved
+interpreter binary had SHA-256
+`1643dacd9feaedc58f3cc581e4d22577dfe25c09b10282936186ccf0f2e61118`.
+All 1,200 runs produced claims; zero runs produced a normalized worker failure.
+
+The resulting materialized tree contains 13 payloads plus
+`release-manifest.json`, with 5,610,036 exact file bytes. Its release root is
+`005987000c049e34f1a5b1f886bb07bcd1d02d983c16ddfd098cde6e79c82d01`.
+The closed [development-candidate receipt][candidate-receipt] has the separate
+receipt root
+`668d2093bef503c0c43300f586427124863d59fc5b75d223d2396fb28da6f313`.
+It is stored outside the release and artifact-tree roots, so it is evidence
+about the captured tree rather than a payload bound by either tree root.
+
+The [`candidate_capture.py` lifecycle][candidate-tool] resolves and hashes the
+physical interpreter, captures the candidate, materializes it, reloads it
+under the derived release root, and semantically verifies its bindings. A
+separate `check` invocation then accepted that release root as an external
+input, reloaded and semantically replayed the materialized candidate, and
+produced the same canonical receipt.
+
+This is one reproducible development observation, not a public release,
+benchmark result, independent root authentication, sandbox result, or runtime
+attestation. The local process backend retains the host UID, filesystem, and
+network capabilities. Gate 12 remains open: there is only one clean
+runtime-bound capture, and the actual frozen programs have not yet been
+executed under a second valid transient schedule. Gate 16 and authenticated
+public-root distribution remain open as well.
 
 Finally, every digest above is a content identity, not a signature, runtime
 attestation, or proof that the code currently loaded in a Python process is
 the code found on disk. A release operator must use an immutable runtime and
 obtain expected roots through an authenticated channel.
+
+[candidate-receipt]: evidence/workspace100-candidate-receipt.json
+[candidate-tool]: ../src/witnessgap/workspace100/candidate_capture.py

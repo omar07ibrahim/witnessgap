@@ -1,47 +1,158 @@
 # WitnessGap
 
-Know when an agent trace cannot justify a cause.
+**Know when an agent trace cannot justify a cause.**
 
-Tool-agent debuggers increasingly patch a suspicious step and replay the rest of
-the run. A successful repair shows that the patch was sufficient to change the
-outcome. It does not, by itself, show that the patched step was the unique or
-minimal source of failure.
+WitnessGap is a typed Python benchmark and certificate verifier for
+identifiability in tool-agent failure attribution. It asks a question that
+ordinary replay-based debugging often skips:
 
-WitnessGap is an identifiability benchmark and certificate verifier for that
-gap. It admits a precise attribution only when the available trace, captured
-state, and bounded intervention panel support it. Otherwise it returns
-`unknown` with a reproducible ambiguity witness.
+> Did the evidence identify the cause, or did one repair merely happen to be
+> sufficient?
 
-## The contract
+A successful patch shows that an intervention can change the outcome. It does
+not show that the patched component was the unique original cause. WitnessGap
+constructs *causal twins*: sealed worlds with byte-identical public failures but
+different minimal repairs. When both worlds remain compatible with the
+available trace, the honest verdict is `not_identifiable`, accompanied by a
+machine-verifiable ambiguity certificate.
 
-Every diagnosis has one of five forms:
+![One failed public trace remains compatible with two sealed completions whose minimal repairs target policy and environment, so the verified verdict is not_identifiable.](docs/images/readme/causal-twins-flow.svg)
 
-- `identified_singleton`: one target is shared by every compatible minimal
-  repair;
-- `identified_compound`: one irreducible repair requires multiple targets;
-- `alternative_minimal_repairs`: multiple incomparable minimal repairs remain
-  under the available evidence;
-- `effect_only`: an intervention changes the outcome without localizing the
-  original fault;
-- `not_identifiable`: compatible hidden worlds still imply incompatible causal
-  verdicts.
+The claim is intentionally bounded. A verdict is valid relative to an explicit
+state schema, intervention algebra, success oracle, and committed finite
+completion family. WitnessGap does **not** claim that this family exhausts
+production failure mechanisms.
 
-An accepted positive certificate includes the failed trace, the replay snapshot,
-the intervention atoms, an outcome flip, and evidence that every strict subset
-fails. An accepted negative certificate exhibits two compatible world
-completions with the same public evidence and different causal verdicts.
+## Why sufficiency is not identifiability
 
-The claim is deliberately bounded: a certificate is valid relative to an
-explicit state schema, intervention algebra, success oracle, and committed
-finite completion family. A registry digest binds every verdict to that
-declared family; it does not prove that an omitted real-world mechanism cannot
-exist. WitnessGap does not infer arbitrary production causality from
-incomplete logs.
+Suppose refreshing a stale store makes an agent task succeed. That observation
+establishes the refresh as a sufficient repair under the replayed state. The
+same failed trace may still be compatible with:
 
-## Smallest complete example
+- an environment completion where the store really was stale; and
+- a policy completion where the selector was wrong, but the refresh happened
+  to alter the concrete resolution.
+
+Point attribution is justified only after the evidence rules out the
+incompatible completion. In the smallest included example, one informative
+probe does that; the unprobed trace does not.
+
+WitnessGap represents the distinction with five verdict forms:
+
+| Verdict | Meaning |
+| --- | --- |
+| `identified_singleton` | One target is shared by every compatible minimal repair. |
+| `identified_compound` | One irreducible repair requires multiple targets. |
+| `alternative_minimal_repairs` | Several incomparable minimal repairs remain. |
+| `effect_only` | An intervention changes the outcome without localizing the original fault. |
+| `not_identifiable` | Compatible hidden worlds imply incompatible causal verdicts. |
+
+![Five WitnessGap verdicts distinguish singleton and compound identification, alternative repairs, effect-only evidence, and non-identifiability; Workspace-100 v1 uses the singleton and non-identifiable subset.](docs/images/readme/verdict-taxonomy.svg)
+
+Workspace-100 v1 deliberately admits only `identified_singleton` and
+`not_identifiable` on its participant wire. The other verdicts belong to the
+wider WitnessGap attribution contract.
+
+## Current status
+
+The core verifier, deterministic Workspace-100 construction, evaluator, scorer,
+release builder, materializer, rooted loader, and semantic release checker are
+implemented. One runtime-bound development candidate has been captured and
+checked. It is not an official or public benchmark release.
+
+| Boundary | Implemented | Not established |
+| --- | --- | --- |
+| Attribution | Finite-family registries, exhaustive repair panels, positive and negative certificates, exact canonical verification | Exhaustiveness over real production failures |
+| Workspace-100 | 5 templates, 50 variants and twin pairs, 100 sealed completions, 4 evidence views, 300 participant cases | Learned-system or production-agent benchmark claims |
+| Evaluation | 4 frozen controls, 1,200 fresh-process records, closed ClaimSet, exact rational scoring | A second clean capture under another valid transient schedule; gate 12 remains open |
+| Release integrity | 13 payloads, closed 25-binding manifest, read-only-mode materialization, rooted load, full semantic replay | Independently authenticated public root, signatures, attestation, or provenance history |
+| Python distribution | Closed sdist surface, archive preflight, repeated byte-identical builds, sdist-built pure-Python wheel, RECORD replay, no-index clean-venv CLI probes | Network isolation, PyPI publication, package signing, or runtime support beyond exact CPython 3.12.3 on Linux x86_64 |
+| Worker lifecycle | Fresh directory and process session, closed environment, bounded pipes, timeout and process-group cleanup | Hostile-code containment; gate 16 remains open |
+
+## Quick start
+
+The development lock is intentionally specific to **CPython 3.12.3 on Linux
+x86_64**. The exact patch version is recorded in
+[`.python-version`](.python-version), and every active dependency in the
+development environment is hash-pinned.
+
+```bash
+# Provide the exact interpreter recorded by the repository.
+cat .python-version
+# 3.12.3
+
+python3.12 -m venv .venv
+source .venv/bin/activate
+python --version
+# Python 3.12.3
+
+python -m pip install --require-hashes -r requirements-dev.lock
+python -m pip install --no-deps --no-build-isolation --editable .
+
+# Build the declared sdist, rebuild its wheel, install with no index, and probe the CLI.
+python tools/verify_distribution.py
+```
+
+Verify the smallest causal-twin certificate:
+
+```bash
+witnessgap example
+```
+
+The deterministic JSON includes:
+
+```json
+{
+  "compatible_completion_count": 2,
+  "official": false,
+  "unknown_reason": "ambiguous_worlds",
+  "verdict": "not_identifiable"
+}
+```
+
+Inspect the frozen Workspace-100 construction:
+
+```bash
+witnessgap workspace100
+```
+
+Selected verified fields from that command are:
+
+```json
+{
+  "counts": {
+    "assignments": 400,
+    "builtin_methods": 4,
+    "completions": 100,
+    "fresh_process_runs_in_full_matrix": 1200,
+    "pairs": 50,
+    "participant_cases": 300,
+    "templates": 5,
+    "variants": 50
+  },
+  "hostile_code_containment": "not_established",
+  "official": false,
+  "public_release_published": false
+}
+```
+
+Its current cardinalities are 5 templates, 50 variants and pairs, 100
+completions, 400 private assignments, 300 participant cases, and 4 frozen
+built-in methods. The returned `fresh_process_runs_in_full_matrix: 1200` is a
+construction cardinality. This command builds the deterministic corpus, public
+views, and baseline registry in process; it does **not** launch 1,200 workers or
+report a benchmark result.
+
+![The reproducible setup flows from the pinned Python version and hash-locked environment through a validated source archive and wheel into CI checks over source, tests, tools, committed evidence, visuals, and clean-environment CLI probes.](docs/images/readme/verification-flow.svg)
+
+## Certificate API
+
+The public example builds a finite registry, observes one failed trace, derives
+an ambiguity certificate, and then verifies the serialized certificate through
+the separate verifier path:
 
 ```python
-from witnessgap.identifiability import CandidateRegistry
+from witnessgap.identifiability import CandidateRegistry, VerdictKind
 from witnessgap.verifier import (
     trust_anchor_for_manifest,
     verify_attribution_certificate,
@@ -52,6 +163,8 @@ from witnessgap.worlds.workspace import workspace_sources, workspace_twins
 worlds = workspace_twins()
 registry = CandidateRegistry.build(worlds)
 evidence = registry.observe(worlds[0].world_id)
+
+# Local authoring helper for this self-contained example.
 anchor = trust_anchor_for_manifest(registry.manifest)
 
 certificate = verify_registry_attribution(
@@ -60,137 +173,260 @@ certificate = verify_registry_attribution(
     trust_anchor=anchor,
     evidence=evidence,
 )
-
-verified_record = verify_attribution_certificate(
+verified = verify_attribution_certificate(
     certificate.to_canonical_bytes(),
     trust_anchor=anchor,
     expected_proof_root=certificate.proof_root,
 )
-assert verified_record.kind == "not_identifiable"
+
+assert verified.kind is VerdictKind.NOT_IDENTIFIABLE
+assert verified.unknown_reason is not None
+assert verified.unknown_reason.value == "ambiguous_worlds"
+assert len(verified.compatible_completion_commitments) == 2
 ```
 
-`trust_anchor_for_manifest` is an authoring helper. A consumer must receive the
-resulting anchor and expected proof root through an independent release channel;
-generating them from the certificate under review would provide no trust.
+`trust_anchor_for_manifest` is a local authoring convenience, not external
+authentication. A real consumer must obtain the trust anchor and expected
+proof root through an independent trusted channel. Re-deriving both from the
+artifact under review would only prove internal consistency.
 
-## Why another benchmark?
+## Workspace-100
 
-Recent systems already cover stochastic do-replay, confidence intervals,
-counterfactual repair, and intervention-supported localization. WitnessGap asks
-an earlier question: *does this evidence license a point attribution at all?*
+Workspace-100 is a frozen synthetic engineering slice that tests two bounded
+claims:
 
-The benchmark is built around causal twins—episodes with byte-identical public
-traces and failure outcomes but different hidden completions and minimal
-repairs. A method is rewarded for useful decisive coverage and penalized for
-unsupported certainty.
+1. the same public failure can remain compatible with different minimal
+   causes; and
+2. one relevant probe or replay receipt can refine that ambiguity into a
+   justified singleton attribution.
 
-Workspace-100 reports decisive coverage, false-certainty risk and incidence,
-ambiguity false certainty, correct abstention, exact target family, and exact
-minimal witness as raw counts plus exact rational values. A future
-participant-controlled query protocol can add fixed-risk coverage and
-intervention efficiency; the current one-record worker does not observe either.
+Five authored tool scenarios each contain ten variants and two sealed
+completions. Deterministic generation produces 50 twin pairs and 100 episodes.
+The projection layer creates 400 private episode-to-view assignments, then
+deduplicates byte-identical public evidence into 300 participant cases.
 
-## Status
+![Workspace-100 expands five templates into 50 variants and causal-twin pairs, 100 sealed completions, 400 private evidence assignments, 300 unique public cases, and a 1,200-run four-control matrix.](docs/images/readme/workspace100-funnel.svg)
 
-WitnessGap is building its first vertical slice. There is a measured,
-regression-pinned built-in report, but no materialized public benchmark release
-yet.
+### Evidence changes what can be claimed
 
-The current core contains one deterministic in-memory tool world, an
-exhaustive search oracle, a manifest-bound causal-twin registry, and a separate
-verifier that accepts exact sealed source bytes rather than executable world
-objects. It resolves a versioned adapter from an internal trust store,
-reconstructs a new world for every replay and probe, validates the complete
-trace/terminal/read-log artifact, and binds the result to externally pinned
-registry, adapter, and verifier digests. Search-time `minimal_witnesses` and
-`target_family` caches are outside that verifier's trust path.
+Every public case exposes the failed baseline trace and outcome. The four views
+then differ only in the additional evidence they license:
 
-The Workspace-100 layer now defines five closed templates, 50 explicit
-variants, and a deterministic generator for 100 salted source openings. Its
-closed runtime adapter accepts only exact authored source records, routes every
-task read through a recording-state capability, and validates the complete
-artifact against a fresh decode. Corpus-wide tests independently verify all
-100 panels: 400 unique receipts, 800 runner executions, and 1,000 source
-decodes. An adversarial suite also rejects field-level trace, terminal,
-state-log, intervention, and cross-twin artifact splices.
+| View | Cases | Additional evidence | Expected construction verdict |
+| --- | ---: | --- | --- |
+| `trace_only` | 50 | None | `not_identifiable` |
+| `owner_probe` | 50 | One deliberately irrelevant owner observation | `not_identifiable` |
+| `epoch_probe` | 100 | One completion-separating epoch observation | `identified_singleton` |
+| `refresh_receipt` | 100 | One bounded environment-refresh replay | `identified_singleton` |
 
-Verified panels now project into four closed evidence views without consulting
-the search oracle: 400 private episode-to-view assignments deduplicate to 300
-participant cases with frozen `50/50/100/100` denominators. Private completion
-routes bind every case to its registry and source snapshot, while the worker
-wire omits routing IDs, labels, other views, and unqueried receipts. Recursive
-leak checks inspect decoded byte fields as well as the JSON wrapper.
+![Four Workspace-100 evidence views preserve ambiguity for 50 trace-only and 50 owner-probe cases, while epoch probes and refresh receipts identify 100 completion-specific cases each.](docs/images/readme/evidence-views.svg)
 
-Evaluator truth is now authored through a second independent replay path. It
-requires 50 caller-supplied trust anchors, verifies every sealed completion
-again, and issues 300 case-bound attribution certificates: 100 ambiguous and
-200 identified, balanced 100/100 across environment and policy. A closed
-canonical release record binds the corpus, public projection, private routes,
-public case bytes, witnesses, and certificates under pinned roots. Parsing
-checks those bindings without executing a sealed source; hashes provide
-integrity, not signatures, so a release consumer must pin the expected root.
+The participant record omits world IDs, completion commitments, pair IDs,
+labels, other views, unqueried receipts, and evaluation truth. Private routes
+remain on the evaluator side. Recursive leak checks inspect decoded byte
+fields as well as JSON structure.
 
-Workspace-100 also has a one-record fresh-process POSIX transport for trusted
-built-in methods. The parent sends exactly one canonical evidence envelope,
-incrementally bounds stdin/stdout/stderr under a monotonic deadline, accepts
-only one canonical claim, and deterministically encodes the observed outcome
-under method, caller-pinned runtime, backend, limit, request, and evidence
-digests. Each Python invocation gets a fresh cwd, home, tmp, environment, and
-process session without receiving an explicit case ID. The staged script
-argument contains no source-checkout path, but the absolute interpreter and
-scratch paths remain visible; a release operator must choose both outside the
-checkout and release tree.
+The evaluator independently replays sealed sources to author 300
+case-bound certificates: 100 ambiguity certificates and 200 singleton
+certificates, balanced 100/100 across environment and policy targets. These
+counts are protocol construction invariants, not empirical model performance.
 
-This lifecycle boundary is intentionally not described as a sandbox. Local
-workers retain the host filesystem, UID, network, and external shared-state
-capabilities, so arbitrary participant code still requires a separately
-pinned OS-level isolation backend before release gate 16 can pass.
+## Measured development candidate
 
-Four deterministic controls now run as pinned standalone bundles:
+The repository records **one successful clean capture only** in the
+[canonical candidate receipt](docs/evidence/workspace100-candidate-receipt.json).
+It is useful reproducibility evidence for the implemented pipeline, but it is
+neither a public release nor an independently authenticated attestation.
+
+| Measured fact | Exact value |
+| --- | --- |
+| Runtime | CPython 3.12.3, Linux x86_64 |
+| Resolved interpreter binary SHA-256 | `1643dacd9feaedc58f3cc581e4d22577dfe25c09b10282936186ccf0f2e61118` |
+| Worker outcomes | 1,200 claimed, 0 failed |
+| Materialized tree | 14 files: 13 payloads plus the manifest |
+| Exact file bytes | 5,610,036 |
+| Release root | `005987000c049e34f1a5b1f886bb07bcd1d02d983c16ddfd098cde6e79c82d01` |
+| Separate receipt root | `668d2093bef503c0c43300f586427124863d59fc5b75d223d2396fb28da6f313` |
+| Official/public release | `false` |
+| Independent root authentication | Not established |
+
+The runtime digest covers the resolved interpreter binary bytes only. It does
+not attest which interpreter historically executed a run. The capture's 50
+trust-anchor records were derived locally for reproducibility; they are not
+external authentication.
+
+### Deterministic protocol controls
+
+The candidate runs four frozen, reviewed, standalone rules:
 `always_unknown`, `forced_environment`, `refresh_success_only`, and
-`refresh_outcome`. Their child sources import only `json` and `sys`, ignore
-digest fingerprints and incidental trace values, and use a documented
-five-entry public tool-to-witness vocabulary. One self-contained canonical
-baseline set publishes exact bytes for all four standalone programs and binds
-their ordered bundle roots under aggregate root
-`f8e5c3aadd426220d52d797cef178efc5aec51cd788092749cf46cf7edf53d4d`.
-The complete 4×300 construction matrix is exercised through 1,200 fresh
-worker processes and assembled into one closed canonical ClaimSet. The
-execution evaluator validates the complete transient schedule before the first
-invocation, pins method, backend, request, and limit identities, preserves
-participant failures, and canonicalizes all 1,200 results independently of
-their storage input order. The ClaimSet contains no execution-order metadata.
-Under identical committed inputs, equal complete worker records for every key
-produce equal bytes and roots; an arbitrary trusted stateful backend is not
-assumed to be schedule-independent.
+`refresh_outcome`. They exercise abstention, overconfident localization, and
+receipt-sensitive behavior across the closed protocol. They are deterministic
+protocol controls—not competing systems, learned baselines, or external
+benchmark comparisons.
 
-The evaluator now canonical-copies that ClaimSet and independently replayed
-truth, rejoins all 1,200 records by evidence digest, recomputes request
-identities, assigns one of nine exhaustive outcomes, and builds additive
-overall, view, template, and view-by-template tables. Rates and template macros
-are exact rationals with explicit zero-denominator `NA`; all five worker
-failure kinds remain auditable. A closed report binds the ClaimSet, truth,
-public projection, baseline registry, scorer source closure, every
-adjudication, four method summaries, and a separate truth-derived oracle
-ceiling. The real fresh-process regression report root is pinned in tests.
+![Exact candidate results compare decisive coverage and false-certainty incidence for four deterministic protocol controls; all 1,200 worker invocations returned claims and none failed.](docs/images/readme/candidate-control-results.svg)
 
-This remains an in-memory measured regression, not a materialized public
-benchmark release. The next engineering slices are seed-provenance release
-artifacts and an external isolation conformance backend. Participant code must
-not receive the full WitnessGap package because it contains the authored
-catalog, sealed-source generator, evaluator truth, and scorer implementation.
+The committed evidence can be checked without regenerating the expensive
+candidate:
 
-See [the attribution contract](docs/attribution-contract.md) for the current
-formal boundary, [the threat model](docs/threat-model.md) for the trusted
-computing base, [the worker boundary](docs/worker-boundary.md) for the
-one-record transport and remaining isolation contract,
-[the baseline bundle contract](docs/baseline-bundles.md) for the public
-method vocabulary, [the ClaimSet contract](docs/claim-set.md) for execution
-records and external verification,
-[the scoring contract](docs/scoring-report.md) for exact metrics and report
-roots, and
-[Workspace-100 protocol](docs/workspace-100-protocol.md) for the frozen Stage B
-slice.
+```bash
+python tools/workspace100_candidate_evidence.py check
+```
+
+![A real deterministic check transcript validates receipt root 668d2093… and its pinned release-root field 00598700…, while visibly recording official false and independent authentication not established.](docs/images/readme/candidate-check-transcript.svg)
+
+That command validates the closed receipt, pinned local roots, reviewed score
+counts, and current source/content closure. Those pins detect drift in this
+Git history; they do not authenticate an external publisher.
+
+![The candidate inventory lists all 14 release-relative files with fixed read-only modes and exact byte lengths, totaling 5,610,036 bytes without exposing any host path.](docs/images/readme/candidate-artifact-inventory.svg)
+
+### What remains open
+
+- **Gate 12 — reproducibility:** open. Only one clean runtime-bound capture
+  exists, and the actual frozen programs have not run under a second valid
+  transient schedule.
+- **Gate 16 — hostile-code isolation:** open. The local backend is only for
+  reviewed built-ins.
+- **Public identity:** absent. No independently authenticated public root,
+  signature, transparency record, or official Workspace-100 release exists.
+
+## Release architecture
+
+The release builder emits a closed allowlist of 13 canonical payload files and
+one manifest below `workspace100/v1`. Materialization uses read-only `0444`
+files and `0555` directories; loading rejects unexpected paths, mutable modes,
+symlink traversal, root disagreement, and malformed canonical records before
+semantic verification.
+
+![The pre-release Workspace-100 tree separates protocol and authored records from sealed sources, verified panels, public views, evaluator truth, results, and the final manifest.](docs/images/readme/release-tree.svg)
+
+The manifest closes over 25 bindings: content roots, implementation identities,
+execution configuration, and a trust-anchor set. The semantic verifier
+reconstructs the corpus, views, and truth; validates the stored canonical
+ClaimSet against the rebuilt protocol objects and pinned execution contract;
+recomputes scores and the report; and compares reconstructed release bytes with
+the expected release root. It does not rerun the 1,200 workers.
+
+![The release binding graph connects content roots, implementation digests, execution configuration, and externally supplied trust anchors into artifact-tree and release roots.](docs/images/readme/release-binding-closure.svg)
+
+Three properties are deliberately kept separate:
+
+- **Integrity and content identity:** canonical encodings and
+  domain-separated digests make changed bytes or bindings produce different
+  roots.
+- **Authentication and attestation:** signatures, an independently trusted
+  release channel, and runtime attestation are outside the current
+  implementation.
+- **Historical provenance:** replay can demonstrate current semantic
+  agreement, but cannot prove who produced an earlier run or which runtime
+  executed it.
+
+A self-consistent tree can therefore be verified structurally without being
+authenticated as an official public release. Consumers must pin the expected
+root outside the candidate.
+
+## Worker boundary
+
+`LocalPythonProcessBackend` is a lifecycle harness for the four reviewed
+stdlib-only programs. For each evidence record it:
+
+- stages exact program bytes in a fresh private directory;
+- launches a new POSIX process session with `-s -S -B -P`;
+- supplies one canonical evidence record on standard input;
+- builds a closed environment instead of inheriting credentials, proxy
+  variables, or `PYTHONPATH`;
+- bounds standard input, output, error, and wall time;
+- parses exactly one canonical claim; and
+- terminates the process group and reaps the direct child on every outcome.
+
+![A fresh-process lifecycle stages one reviewed program, sends one evidence record through bounded pipes, parses one claim, and cleans up the process group while leaving host filesystem, UID, and network access explicitly uncontained.](docs/images/readme/isolation-boundary.svg)
+
+This boundary removes persistent process memory and an explicit case-order
+channel. It is **not a sandbox**: the child retains the evaluator’s host UID,
+filesystem, network, process namespace, and external shared-state
+capabilities. Running arbitrary participant code requires a separate,
+independently pinned OS-level backend with filesystem, identity, network,
+metadata-service, resource, namespace, and cgroup controls.
+
+## Hard engineering decisions
+
+- **Verify exact bytes, not executable objects.** The verifier resolves a
+  closed adapter from digest-bound source and reconstructs a fresh world for
+  every replay and probe.
+- **Keep search outside the trust path.** Cached minimal witnesses and target
+  families help construction, but accepted certificates are independently
+  replayed from sealed source openings.
+- **Bind evidence at its real grain.** Trace-only and owner-probe twins
+  deduplicate to pair-level cases; informative views remain
+  completion-specific.
+- **Separate public and private capabilities.** Participants receive one
+  evidence envelope. Sources, routes, truth, labels, and score machinery stay
+  evaluator-side.
+- **Preserve failures rather than reinterpret them.** Timeouts, output bounds,
+  nonzero exits, empty output, and invalid claims remain distinct rooted worker
+  outcomes.
+- **Use exact arithmetic.** Score tables store raw counts and rational values;
+  zero denominators carry explicit `not_applicable` reasons.
+- **Make release verification semantic.** Hash checks are followed by corpus,
+  view, and truth reconstruction, stored-ClaimSet validation, score/report
+  recomputation, and binding replay; hashes are not treated as proof of
+  correctness by themselves.
+
+## Reproduce the repository checks
+
+After the hash-locked installation above, the local verification path mirrors
+CI:
+
+```bash
+ruff check src test tools
+mypy --strict src test tools
+python tools/workspace100_candidate_evidence.py check
+python tools/render_readme_visuals.py check
+python tools/verify_distribution.py
+witnessgap example
+pytest
+```
+
+CI runs on Ubuntu 24.04 with CPython 3.12.3, read-only repository permissions,
+SHA-pinned GitHub Actions, a hash-locked dependency install, and an editable
+package install. CI also builds the declared source archive twice, rejects
+unsafe or colliding archive paths, rebuilds a byte-identical pure-Python wheel
+twice from that extracted sdist, replays wheel metadata and `RECORD`, installs
+with no package index into a clean virtual environment, and probes both module
+and console entry points outside the checkout. The `py3-none-any` tag records
+the absence of a native ABI; this repository verifies execution only on exact
+CPython 3.12.3 and Linux x86_64, and the no-index install is not a claim of
+network sandboxing. The candidate evidence and README visual checks fail when
+committed artifacts drift from their reviewed sources.
+
+The SVGs in this README are generated from production constructors, enums,
+release schemas, the committed candidate receipt, and the CI workflow:
+
+```bash
+python tools/render_readme_visuals.py write
+python tools/render_readme_visuals.py check
+```
+
+Their source paths, SHA-256 digests, extracted facts, nonclaims, and output
+digests are recorded in the
+[visual provenance manifest](docs/images/readme/provenance.json). The diagrams
+contain no external fonts, remote assets, secrets, personal data, or fabricated
+benchmark observations.
+
+## Repository map
+
+| Area | Where to start |
+| --- | --- |
+| Finite-family reasoning | [`identifiability.py`](src/witnessgap/identifiability.py), [`oracle.py`](src/witnessgap/oracle.py) |
+| Independent certificate verification | [`verifier.py`](src/witnessgap/verifier.py), [attribution contract](docs/attribution-contract.md) |
+| Workspace-100 construction | [`workspace100/`](src/witnessgap/workspace100), [frozen protocol](docs/workspace-100-protocol.md) |
+| Participant evidence and execution records | [worker boundary](docs/worker-boundary.md), [ClaimSet contract](docs/claim-set.md) |
+| Built-in controls and scoring | [baseline bundles](docs/baseline-bundles.md), [scoring contract](docs/scoring-report.md) |
+| Release capture and verification | [`candidate_capture.py`](src/witnessgap/workspace100/candidate_capture.py), [candidate receipt](docs/evidence/workspace100-candidate-receipt.json) |
+| Security boundary | [threat model](docs/threat-model.md) |
+| Reproducible evidence | [`tools/`](tools), [visual provenance](docs/images/readme/provenance.json) |
+| Tests | [`test/`](test) |
 
 ## Related work
 
@@ -203,4 +439,4 @@ WitnessGap is complementary to, rather than an implementation of:
 
 ## License
 
-Apache-2.0
+[Apache-2.0](LICENSE)

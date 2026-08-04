@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.27"]
+requires = ["hatchling==1.27.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -7,7 +7,7 @@ name = "witnessgap"
 version = "0.0.1"
 description = "Identifiability certificates for tool-agent failure attribution"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [
   { name = "Omar Ibrahim", email = "31526072+omar07ibrahim@users.noreply.github.com" },
@@ -18,6 +18,9 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Typing :: Typed",
 ]
+
+[project.scripts]
+witnessgap = "witnessgap.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -30,10 +33,25 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/witnessgap"]
 
+[tool.hatch.build.targets.sdist]
+include = [
+  "/.github",
+  "/.gitignore",
+  "/.python-version",
+  "/LICENSE",
+  "/README.md",
+  "/docs",
+  "/pyproject.toml",
+  "/requirements-dev.lock",
+  "/src",
+  "/test",
+  "/tools",
+]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src", "test"]
+files = ["src", "test", "tools"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"
@@ -45,4 +63,3 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["A", "ARG", "B", "C4", "E", "F", "I", "N", "PERF", "PIE", "PL", "PYI", "RUF", "SIM", "UP"]
-
