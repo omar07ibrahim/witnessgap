@@ -1,8 +1,13 @@
 {
   "format": "witnessgap.readme-visual-provenance.v1",
   "generator": "tools/render_readme_visuals.py",
+  "layout_contract": {
+    "geometry": "viewbox-and-active-fill-bounds.v1",
+    "minimum_text_contrast_ratio": 4.5,
+    "text_width": "explicit-textLength.v1"
+  },
   "official": false,
-  "renderer_version": 1,
+  "renderer_version": 2,
   "sources": [
     {
       "path": ".github/workflows/ci.yml",
@@ -74,7 +79,7 @@
     },
     {
       "path": "tools/render_readme_visuals.py",
-      "sha256": "15d2cba8496e5eda335febb0f67dde1646849a5bf07e5ac346fbf9d9e2652776"
+      "sha256": "f40472fde2020efa93b7adbacca72479615d31f1f5b89c6d959c2aea21e0848b"
     },
     {
       "path": "tools/workspace100_candidate_evidence.py",
@@ -112,7 +117,7 @@
         "Content digests are not signatures or runtime attestations."
       ],
       "official": false,
-      "sha256": "b9e476b610d59f2d29a5653d41f672654e399722202af974b3e72ebe8f9c61a0",
+      "sha256": "f0bba7ca988f1c79395895be4024b98413a2d3ea551adadfab0e414f3e3f8da6",
       "source_paths": [
         "src/witnessgap/identifiability.py",
         "src/witnessgap/oracle.py",
@@ -160,7 +165,7 @@
         "The taxonomy is a protocol contract, not a performance result."
       ],
       "official": false,
-      "sha256": "7268ae2b822a97a7d4284e07529bc33956adc618f60fa7af597b1d5866256ec9",
+      "sha256": "592258156cee1ce69b1ccd3c01e5e0c42e6414d0763ed6562eb76208443806b4",
       "source_paths": [
         "src/witnessgap/identifiability.py",
         "src/witnessgap/workspace100/evidence.py"
@@ -269,7 +274,7 @@
         "The 400 evidence assignments are distinct from 400 verifier receipts."
       ],
       "official": false,
-      "sha256": "de210d8322ccbba5b18e878612bb27ccf158517077a4555b95f8e772a76ef49b",
+      "sha256": "f098f4bf86f45602adf9e64cf77dc320f5668ae4f2effc72603d3ed8718a84e9",
       "source_paths": [
         "src/witnessgap/workspace100/baselines.py",
         "src/witnessgap/workspace100/catalog.py",
@@ -373,7 +378,7 @@
         "Private routing and truth labels are not participant-visible."
       ],
       "official": false,
-      "sha256": "b3bf5b3fdb0334820153e0451ae7e266f53d5c6a3e7854ec810d9f3fa03ef227",
+      "sha256": "b14cae63c63fecaf2901470d7fe3f504e08b7447b07e08b8db04850e4552b714",
       "source_paths": [
         "src/witnessgap/workspace100/evidence.py",
         "src/witnessgap/workspace100/generation.py",
@@ -429,7 +434,7 @@
         "The manifest is not a signature, runtime attestation, or isolation proof."
       ],
       "official": false,
-      "sha256": "14f89c0cc8d048ef06c017c3ce190977302f1942eb9265ae7cf55db268945b19",
+      "sha256": "112bcf1dd75c63bc37fbbb19eb6977e6090f55ea77d0e86607e0caf7a2266860",
       "source_paths": [
         "src/witnessgap/workspace100/release.py",
         "src/witnessgap/workspace100/release_io.py"
@@ -526,7 +531,7 @@
         "No release root shown here is a published Workspace-100 release identity."
       ],
       "official": false,
-      "sha256": "98c43699b8673db941d49b3d949cb4984fb73aa89b45c57fb3844874d770efe8",
+      "sha256": "212010c3434c7507db05720ac6d4dce0dcecc3ce1b0585033102ecbbe2328902",
       "source_paths": [
         "src/witnessgap/workspace100/release.py"
       ],
@@ -590,7 +595,7 @@
         "Release gate 16 remains not_established."
       ],
       "official": false,
-      "sha256": "9d513934d8a391b752285ad397905161bfac15a90be40a89b94eca4315ce1fc4",
+      "sha256": "43bf6aa3502c0157b8e2c61fa0e1c3916e958ec501e4a5a2ef6ebd5ad6537fd6",
       "source_paths": [
         "src/witnessgap/workspace100/release.py",
         "src/witnessgap/workspace100/worker.py"
@@ -702,7 +707,7 @@
         "The receipt does not independently authenticate its release root."
       ],
       "official": false,
-      "sha256": "f0a8ea6d98ea6bc5ba71ed3f93ce4d9dc4aab6596f336101f4cfdb6b32d4ae78",
+      "sha256": "abbcab5664402a591f50df023a6821579988761ffb79a2a4218adeb58576264b",
       "source_paths": [
         "docs/evidence/workspace100-candidate-receipt.json",
         "tools/workspace100_candidate_evidence.py"
@@ -737,7 +742,7 @@
         "The development candidate is not an official Workspace-100 release."
       ],
       "official": false,
-      "sha256": "a4b713552f5277f2ac9f1e4679eaabd96de29f741b16fa0ba4bfe9d7f3da247a",
+      "sha256": "5251633b51f0ea39ab74a7221be6c2ffa257d5dd5686739cf829a583f484cc6a",
       "source_paths": [
         "docs/evidence/workspace100-candidate-receipt.json",
         "tools/workspace100_candidate_evidence.py"
@@ -855,7 +860,7 @@
         "The development candidate is not an official release."
       ],
       "official": false,
-      "sha256": "813b6b0c3cd19940b1bb0d0a1ce694924bd5481ecac02ac5ea0d7ea49f688e05",
+      "sha256": "838e982927eedea27baa639891ac876f1c16f3d42dcda64a719ffd73b98e9371",
       "source_paths": [
         "docs/evidence/workspace100-candidate-receipt.json",
         "src/witnessgap/workspace100/release.py",
@@ -929,7 +934,7 @@
         "The local process backend is not a hostile-code sandbox."
       ],
       "official": false,
-      "sha256": "63424000d0926063ece237a169e81222afc9c9fda2c94b19e22aa895b53e17ee",
+      "sha256": "84e41cbe57d231be5e3d1adbf38c9b816f6c693b5453f7f478a9a7a7a782d097",
       "source_paths": [
         ".github/workflows/ci.yml",
         ".python-version",

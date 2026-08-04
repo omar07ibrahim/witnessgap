@@ -3,55 +3,55 @@
   <title id="visual-title">Workspace-100 participant evidence views</title>
   <desc id="visual-description">Four production evidence views always expose the failed baseline trace and outcome. Trace-only and owner-probe deduplicate to fifty cases each; epoch-probe and refresh-receipt remain completion-specific at one hundred each.</desc>
   <rect x="0" y="0" width="1440" height="930" fill="#08111f"/>
-  <text x="60" y="52" fill="#58d6c9" font-family="monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="2">WORKSPACE-100 / PARTICIPANT WIRE</text>
-  <text x="60" y="98" fill="#f4f7fb" font-family="monospace" font-size="34" font-weight="700" text-anchor="start" letter-spacing="0">Four evidence views, one deliberately narrow envelope</text>
-  <text x="60" y="132" fill="#afc2d8" font-family="monospace" font-size="18" font-weight="400" text-anchor="start" letter-spacing="0">Always present: baseline public_trace + failure outcome. Private routing stays parent-side.</text>
+  <text x="60" y="52" fill="#58d6c9" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="700" text-anchor="start" letter-spacing="2" textLength="360" lengthAdjust="spacingAndGlyphs">WORKSPACE-100 / PARTICIPANT WIRE</text>
+  <text x="60" y="98" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="34" font-weight="700" text-anchor="start" letter-spacing="0" textLength="1118" lengthAdjust="spacingAndGlyphs">Four evidence views, one deliberately narrow envelope</text>
+  <text x="60" y="132" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="18" font-weight="400" text-anchor="start" letter-spacing="0" textLength="1016" lengthAdjust="spacingAndGlyphs">Always present: baseline public_trace + failure outcome. Private routing stays parent-side.</text>
   <rect x="60" y="205" width="300" height="430" rx="18" fill="#111f33" stroke="#6eb7ff" stroke-width="2"/>
-  <text x="84" y="246" fill="#6eb7ff" font-family="monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0">trace_only</text>
-  <text x="84" y="315" fill="#f4f7fb" font-family="monospace" font-size="44" font-weight="700" text-anchor="start" letter-spacing="0">50</text>
-  <text x="84" y="346" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">unique public cases</text>
+  <text x="84" y="246" fill="#6eb7ff" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0" textLength="112" lengthAdjust="spacingAndGlyphs">trace_only</text>
+  <text x="84" y="315" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="44" font-weight="700" text-anchor="start" letter-spacing="0" textLength="55" lengthAdjust="spacingAndGlyphs">50</text>
+  <text x="84" y="346" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0" textLength="177" lengthAdjust="spacingAndGlyphs">unique public cases</text>
   <line x1="84" y1="375" x2="336" y2="375" stroke="#2d4665" stroke-width="2" stroke-linecap="round"/>
-  <text x="84" y="414" fill="#f4f7fb" font-family="monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0">no added observation</text>
-  <text x="84" y="486" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">baseline public_trace +</text>
-  <text x="84" y="510" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">outcome</text>
+  <text x="84" y="414" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0" textLength="224" lengthAdjust="spacingAndGlyphs">no added observation</text>
+  <text x="84" y="486" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0" textLength="214" lengthAdjust="spacingAndGlyphs">baseline public_trace +</text>
+  <text x="84" y="510" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0" textLength="66" lengthAdjust="spacingAndGlyphs">outcome</text>
   <rect x="84" y="562" width="250" height="42" rx="21" fill="#18243b" stroke="#6eb7ff" stroke-width="2"/>
-  <text x="209" y="590" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0">pair-grain dedupe</text>
+  <text x="209" y="590" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0" textLength="169" lengthAdjust="spacingAndGlyphs">pair-grain dedupe</text>
   <rect x="400" y="205" width="300" height="430" rx="18" fill="#111f33" stroke="#b8a1ff" stroke-width="2"/>
-  <text x="424" y="246" fill="#b8a1ff" font-family="monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0">owner_probe</text>
-  <text x="424" y="315" fill="#f4f7fb" font-family="monospace" font-size="44" font-weight="700" text-anchor="start" letter-spacing="0">50</text>
-  <text x="424" y="346" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">unique public cases</text>
+  <text x="424" y="246" fill="#b8a1ff" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0" textLength="123" lengthAdjust="spacingAndGlyphs">owner_probe</text>
+  <text x="424" y="315" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="44" font-weight="700" text-anchor="start" letter-spacing="0" textLength="55" lengthAdjust="spacingAndGlyphs">50</text>
+  <text x="424" y="346" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0" textLength="177" lengthAdjust="spacingAndGlyphs">unique public cases</text>
   <line x1="424" y1="375" x2="676" y2="375" stroke="#2d4665" stroke-width="2" stroke-linecap="round"/>
-  <text x="424" y="414" fill="#f4f7fb" font-family="monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0">+ neutral control probe</text>
-  <text x="424" y="486" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">workspace_owner</text>
+  <text x="424" y="414" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0" textLength="257" lengthAdjust="spacingAndGlyphs">+ neutral control probe</text>
+  <text x="424" y="486" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0" textLength="140" lengthAdjust="spacingAndGlyphs">workspace_owner</text>
   <rect x="424" y="562" width="250" height="42" rx="21" fill="#18243b" stroke="#6eb7ff" stroke-width="2"/>
-  <text x="549" y="590" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0">pair-grain dedupe</text>
+  <text x="549" y="590" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0" textLength="169" lengthAdjust="spacingAndGlyphs">pair-grain dedupe</text>
   <rect x="740" y="205" width="300" height="430" rx="18" fill="#111f33" stroke="#ffd166" stroke-width="2"/>
-  <text x="764" y="246" fill="#ffd166" font-family="monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0">epoch_probe</text>
-  <text x="764" y="315" fill="#f4f7fb" font-family="monospace" font-size="44" font-weight="700" text-anchor="start" letter-spacing="0">100</text>
-  <text x="764" y="346" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">unique public cases</text>
+  <text x="764" y="246" fill="#ffd166" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0" textLength="123" lengthAdjust="spacingAndGlyphs">epoch_probe</text>
+  <text x="764" y="315" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="44" font-weight="700" text-anchor="start" letter-spacing="0" textLength="82" lengthAdjust="spacingAndGlyphs">100</text>
+  <text x="764" y="346" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0" textLength="177" lengthAdjust="spacingAndGlyphs">unique public cases</text>
   <line x1="764" y1="375" x2="1016" y2="375" stroke="#2d4665" stroke-width="2" stroke-linecap="round"/>
-  <text x="764" y="414" fill="#f4f7fb" font-family="monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0">+ 1 template epoch probe</text>
-  <text x="764" y="486" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">5 exact names across</text>
-  <text x="764" y="510" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">templates</text>
+  <text x="764" y="414" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0" textLength="268" lengthAdjust="spacingAndGlyphs">+ 1 template epoch probe</text>
+  <text x="764" y="486" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0" textLength="186" lengthAdjust="spacingAndGlyphs">5 exact names across</text>
+  <text x="764" y="510" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0" textLength="84" lengthAdjust="spacingAndGlyphs">templates</text>
   <rect x="764" y="562" width="250" height="42" rx="21" fill="#22223b" stroke="#b8a1ff" stroke-width="2"/>
-  <text x="889" y="590" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0">completion-specific</text>
+  <text x="889" y="590" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0" textLength="189" lengthAdjust="spacingAndGlyphs">completion-specific</text>
   <rect x="1080" y="205" width="300" height="430" rx="18" fill="#111f33" stroke="#58d6c9" stroke-width="2"/>
-  <text x="1104" y="246" fill="#58d6c9" font-family="monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0">refresh_receipt</text>
-  <text x="1104" y="315" fill="#f4f7fb" font-family="monospace" font-size="44" font-weight="700" text-anchor="start" letter-spacing="0">100</text>
-  <text x="1104" y="346" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">unique public cases</text>
+  <text x="1104" y="246" fill="#58d6c9" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0" textLength="168" lengthAdjust="spacingAndGlyphs">refresh_receipt</text>
+  <text x="1104" y="315" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="44" font-weight="700" text-anchor="start" letter-spacing="0" textLength="82" lengthAdjust="spacingAndGlyphs">100</text>
+  <text x="1104" y="346" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0" textLength="177" lengthAdjust="spacingAndGlyphs">unique public cases</text>
   <line x1="1104" y1="375" x2="1356" y2="375" stroke="#2d4665" stroke-width="2" stroke-linecap="round"/>
-  <text x="1104" y="414" fill="#f4f7fb" font-family="monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0">+ 1 refresh receipt</text>
-  <text x="1104" y="486" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">interventions + public_trace</text>
-  <text x="1104" y="510" fill="#afc2d8" font-family="monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0">+ outcome</text>
+  <text x="1104" y="414" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0" textLength="213" lengthAdjust="spacingAndGlyphs">+ 1 refresh receipt</text>
+  <text x="1104" y="486" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0" textLength="261" lengthAdjust="spacingAndGlyphs">interventions + public_trace</text>
+  <text x="1104" y="510" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="15" font-weight="400" text-anchor="start" letter-spacing="0" textLength="84" lengthAdjust="spacingAndGlyphs">+ outcome</text>
   <rect x="1104" y="562" width="250" height="42" rx="21" fill="#22223b" stroke="#b8a1ff" stroke-width="2"/>
-  <text x="1229" y="590" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0">completion-specific</text>
+  <text x="1229" y="590" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0" textLength="189" lengthAdjust="spacingAndGlyphs">completion-specific</text>
   <rect x="60" y="680" width="1320" height="135" rx="18" fill="#0e2630" stroke="#58d6c9" stroke-width="2"/>
-  <text x="88" y="719" fill="#58d6c9" font-family="monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0">NOT ON THE WORKER WIRE</text>
-  <text x="88" y="754" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">view · split · template_id · episode_id · pair_id · evidence_digest</text>
-  <text x="88" y="784" fill="#f4f7fb" font-family="monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">completion commitment · source snapshot · target label · canonical position</text>
+  <text x="88" y="719" fill="#58d6c9" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0" textLength="191" lengthAdjust="spacingAndGlyphs">NOT ON THE WORKER WIRE</text>
+  <text x="88" y="754" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0" textLength="665" lengthAdjust="spacingAndGlyphs">view · split · template_id · episode_id · pair_id · evidence_digest</text>
+  <text x="88" y="784" fill="#f4f7fb" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0" textLength="744" lengthAdjust="spacingAndGlyphs">completion commitment · source snapshot · target label · canonical position</text>
   <line x1="60" y1="844" x2="1380" y2="844" stroke="#2d4665" stroke-width="2" stroke-linecap="round"/>
   <rect x="60" y="862" width="170" height="42" rx="21" fill="#2b1d28" stroke="#ff7b86" stroke-width="2"/>
-  <text x="145" y="890" fill="#ffd7db" font-family="monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0">official: false</text>
-  <text x="250" y="878" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">source: workspace100.views.ViewKind · _project_evidence · PublicEvidenceEnvelope</text>
-  <text x="250" y="902" fill="#afc2d8" font-family="monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0">nonclaim: owner_probe is a neutral control; view counts are construction invariants, not results</text>
+  <text x="145" y="890" fill="#ffd7db" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="0" textLength="149" lengthAdjust="spacingAndGlyphs">official: false</text>
+  <text x="250" y="878" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0" textLength="695" lengthAdjust="spacingAndGlyphs">source: workspace100.views.ViewKind · _project_evidence · PublicEvidenceEnvelope</text>
+  <text x="250" y="902" fill="#afc2d8" font-family="DejaVu Sans Mono, Liberation Mono, monospace" font-size="14" font-weight="400" text-anchor="start" letter-spacing="0" textLength="834" lengthAdjust="spacingAndGlyphs">nonclaim: owner_probe is a neutral control; view counts are construction invariants, not results</text>
 </svg>

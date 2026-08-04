@@ -21,10 +21,11 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, fields
 from functools import lru_cache
 from html import escape
-from math import gcd
+from math import ceil, gcd, isfinite
 from pathlib import Path
 from types import ModuleType
 from typing import Final, cast
+from unicodedata import combining, east_asian_width
 from xml.etree import ElementTree
 
 ROOT: Final = Path(__file__).resolve().parents[1]
@@ -80,7 +81,7 @@ from witnessgap.worlds import workspace as workspace_module  # noqa: E402
 from witnessgap.worlds.workspace import workspace_twins  # noqa: E402
 
 _FORMAT: Final = "witnessgap.readme-visual-provenance.v1"
-_RENDERER_VERSION: Final = 1
+_RENDERER_VERSION: Final = 2
 _EXPECTED_TEMPLATE_COUNT: Final = 5
 _EXPECTED_VARIANTS_PER_TEMPLATE: Final = 10
 _EXPECTED_VARIANT_COUNT: Final = 50
@@ -112,6 +113,10 @@ _GOLD: Final = "#ffd166"
 _RED: Final = "#ff7b86"
 _GREEN: Final = "#82e39c"
 _PURPLE: Final = "#b8a1ff"
+_FONT_FAMILY: Final = "DejaVu Sans Mono, Liberation Mono, monospace"
+_MONOSPACE_ADVANCE_EM: Final = 0.62
+_MINIMUM_TEXT_CONTRAST_RATIO: Final = 4.5
+_SRGB_LINEAR_THRESHOLD: Final = 0.04045
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,17 +133,93 @@ class Visual:
     source_files: tuple[Path, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class Bounds:
+    """Conservative bounds for one deterministic SVG primitive."""
+
+    left: float
+    top: float
+    right: float
+    bottom: float
+
+    def contains(self, other: Bounds) -> bool:
+        return (
+            self.left <= other.left
+            and self.top <= other.top
+            and self.right >= other.right
+            and self.bottom >= other.bottom
+        )
+
+    def contains_point(self, x: float, y: float) -> bool:
+        return self.left <= x <= self.right and self.top <= y <= self.bottom
+
+
+@dataclass(frozen=True, slots=True)
+class PaintedRegion:
+    """Opaque rectangle available as the active background for later text."""
+
+    bounds: Bounds
+    fill: str
+
+
+def _parse_hex_color(value: str) -> tuple[int, int, int]:
+    if re.fullmatch(r"#[0-9a-fA-F]{6}", value) is None:
+        raise ValueError(f"SVG colors must be opaque six-digit hex values: {value!r}")
+    return (
+        int(value[1:3], 16),
+        int(value[3:5], 16),
+        int(value[5:7], 16),
+    )
+
+
+def _relative_luminance(value: str) -> float:
+    channels = tuple(channel / 255 for channel in _parse_hex_color(value))
+    linear = tuple(
+        channel / 12.92 if channel <= _SRGB_LINEAR_THRESHOLD else ((channel + 0.055) / 1.055) ** 2.4
+        for channel in channels
+    )
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def _contrast_ratio(foreground: str, background: str) -> float:
+    foreground_luminance = _relative_luminance(foreground)
+    background_luminance = _relative_luminance(background)
+    lighter = max(foreground_luminance, background_luminance)
+    darker = min(foreground_luminance, background_luminance)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def _visible_monospace_cells(value: str) -> int:
+    return sum(
+        0 if combining(character) else 2 if east_asian_width(character) in {"F", "W"} else 1
+        for character in value
+    )
+
+
 class Svg:
-    """Tiny deterministic SVG writer with no external resources."""
+    """Deterministic SVG writer with enforced geometry and text contrast."""
 
     def __init__(self, width: int, height: int, *, title: str, description: str) -> None:
+        if width <= 0 or height <= 0:
+            raise ValueError("SVG canvas dimensions must be positive")
         self.width = width
         self.height = height
+        self._canvas = Bounds(0, 0, width, height)
+        self._regions = [PaintedRegion(bounds=self._canvas, fill=_BACKGROUND)]
         self._body: list[str] = [
             (f'<rect x="0" y="0" width="{width}" height="{height}" fill="{_BACKGROUND}"/>')
         ]
         self._title = title
         self._description = description
+
+    def _require_canvas_bounds(self, bounds: Bounds, *, primitive: str) -> None:
+        coordinates = (bounds.left, bounds.top, bounds.right, bounds.bottom)
+        if not all(isfinite(value) for value in coordinates):
+            raise ValueError(f"{primitive} bounds must be finite")
+        if bounds.left > bounds.right or bounds.top > bounds.bottom:
+            raise ValueError(f"{primitive} bounds are inverted")
+        if not self._canvas.contains(bounds):
+            raise ValueError(f"{primitive} escaped the SVG viewBox: {bounds}")
 
     def rect(  # noqa: PLR0913
         self,
@@ -152,11 +233,31 @@ class Svg:
         stroke_width: int = 2,
         radius: int = 18,
     ) -> None:
+        _parse_hex_color(fill)
+        _parse_hex_color(stroke)
+        if width <= 0 or height <= 0:
+            raise ValueError("rectangle dimensions must be positive")
+        if stroke_width < 0:
+            raise ValueError("rectangle stroke width cannot be negative")
+        if radius < 0 or radius > min(width, height) / 2:
+            raise ValueError("rectangle radius must fit its dimensions")
+        stroke_margin = stroke_width / 2
+        self._require_canvas_bounds(
+            Bounds(
+                x - stroke_margin,
+                y - stroke_margin,
+                x + width + stroke_margin,
+                y + height + stroke_margin,
+            ),
+            primitive="rectangle",
+        )
+        region = PaintedRegion(bounds=Bounds(x, y, x + width, y + height), fill=fill)
         self._body.append(
             f'<rect x="{x}" y="{y}" width="{width}" height="{height}" '
             f'rx="{radius}" fill="{fill}" stroke="{stroke}" '
             f'stroke-width="{stroke_width}"/>'
         )
+        self._regions.append(region)
 
     def line(  # noqa: PLR0913
         self,
@@ -169,6 +270,19 @@ class Svg:
         width: int = 3,
         dash: str | None = None,
     ) -> None:
+        _parse_hex_color(color)
+        if width <= 0:
+            raise ValueError("line width must be positive")
+        stroke_margin = width / 2
+        self._require_canvas_bounds(
+            Bounds(
+                min(x1, x2) - stroke_margin,
+                min(y1, y2) - stroke_margin,
+                max(x1, x2) + stroke_margin,
+                max(y1, y2) + stroke_margin,
+            ),
+            primitive="line",
+        )
         dash_attribute = f' stroke-dasharray="{dash}"' if dash is not None else ""
         self._body.append(
             f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" '
@@ -186,7 +300,6 @@ class Svg:
         color: str = _ACCENT,
         width: int = 3,
     ) -> None:
-        self.line(x1, y1, x2, y2, color=color, width=width)
         if abs(x2 - x1) >= abs(y2 - y1):
             direction = 1 if x2 >= x1 else -1
             points = (
@@ -201,6 +314,16 @@ class Svg:
                 (x2 - 8, y2 - direction * 13),
                 (x2 + 8, y2 - direction * 13),
             )
+        self._require_canvas_bounds(
+            Bounds(
+                min(point[0] for point in points),
+                min(point[1] for point in points),
+                max(point[0] for point in points),
+                max(point[1] for point in points),
+            ),
+            primitive="arrow head",
+        )
+        self.line(x1, y1, x2, y2, color=color, width=width)
         encoded = " ".join(f"{x},{y}" for x, y in points)
         self._body.append(f'<polygon points="{encoded}" fill="{color}"/>')
 
@@ -216,10 +339,47 @@ class Svg:
         anchor: str = "start",
         letter_spacing: int = 0,
     ) -> None:
+        if not value or "\n" in value or "\r" in value:
+            raise ValueError("SVG text must be one non-empty line")
+        if size <= 0:
+            raise ValueError("text size must be positive")
+        if anchor not in {"start", "middle", "end"}:
+            raise ValueError(f"unsupported text anchor: {anchor!r}")
+        if letter_spacing < 0:
+            raise ValueError("text letter spacing cannot be negative")
+        _parse_hex_color(color)
+        cells = _visible_monospace_cells(value)
+        if cells <= 0:
+            raise ValueError("SVG text must contain a visible monospace cell")
+        text_length = ceil(
+            cells * size * _MONOSPACE_ADVANCE_EM + max(cells - 1, 0) * letter_spacing
+        )
+        left = (
+            x
+            if anchor == "start"
+            else x - text_length / 2
+            if anchor == "middle"
+            else x - text_length
+        )
+        bounds = Bounds(left, y - size, left + text_length, y + ceil(size * 0.30))
+        self._require_canvas_bounds(bounds, primitive="text")
+        active_region = next(
+            (region for region in reversed(self._regions) if region.bounds.contains_point(x, y)),
+            None,
+        )
+        if active_region is None or not active_region.bounds.contains(bounds):
+            raise ValueError(f"text escaped its active painted region: {value!r}")
+        contrast = _contrast_ratio(color, active_region.fill)
+        if contrast < _MINIMUM_TEXT_CONTRAST_RATIO:
+            raise ValueError(
+                f"text contrast {contrast:.3f}:1 is below "
+                f"{_MINIMUM_TEXT_CONTRAST_RATIO:.1f}:1 for {value!r}"
+            )
         self._body.append(
-            f'<text x="{x}" y="{y}" fill="{color}" font-family="monospace" '
+            f'<text x="{x}" y="{y}" fill="{color}" font-family="{_FONT_FAMILY}" '
             f'font-size="{size}" font-weight="{weight}" '
-            f'text-anchor="{anchor}" letter-spacing="{letter_spacing}">'
+            f'text-anchor="{anchor}" letter-spacing="{letter_spacing}" '
+            f'textLength="{text_length}" lengthAdjust="spacingAndGlyphs">'
             f"{escape(value)}</text>"
         )
 
@@ -236,15 +396,16 @@ class Svg:
         anchor: str = "start",
     ) -> None:
         for index, line in enumerate(lines):
-            self.text(
-                x,
-                y + index * line_height,
-                line,
-                size=size,
-                color=color,
-                weight=weight,
-                anchor=anchor,
-            )
+            if line:
+                self.text(
+                    x,
+                    y + index * line_height,
+                    line,
+                    size=size,
+                    color=color,
+                    weight=weight,
+                    anchor=anchor,
+                )
 
     def pill(  # noqa: PLR0913
         self,
@@ -1163,13 +1324,16 @@ def _render_release_tree() -> Visual:
 
     svg.rect(985, 175, 395, 220, fill="#211c37", stroke=_PURPLE)
     svg.text(1015, 216, "RELEASE KIND", size=13, color=_PURPLE, weight=700)
+    release_kind_lines = ("pre_release_", "reproducibility_", "candidate")
+    if "".join(release_kind_lines) != RELEASE_KIND:
+        raise RuntimeError("release-kind visual wrapping is stale")
     svg.multiline(
         1015,
         260,
-        _wrap_words(RELEASE_KIND, 30),
-        size=19,
+        release_kind_lines,
+        size=18,
         weight=700,
-        line_height=30,
+        line_height=28,
     )
     svg.text(1015, 350, "frozen reviewed built-ins only", size=14, color=_MUTED)
 
@@ -2139,15 +2303,16 @@ def _render_candidate_artifact_inventory() -> Visual:
             stroke_width=1,
             radius=5,
         )
+        fill_width = max(2, bar_width * artifact.byte_length // maximum_bytes)
         svg.rect(
             bar_x,
             y - 17,
-            max(2, bar_width * artifact.byte_length // maximum_bytes),
+            fill_width,
             18,
             fill=color,
             stroke=color,
             stroke_width=1,
-            radius=5,
+            radius=min(5, fill_width // 2),
         )
 
     receipt_root = _string_value(payload["receipt_root"], label="candidate receipt root")
@@ -2590,6 +2755,11 @@ def _manifest(visuals: tuple[Visual, ...]) -> bytes:
     payload = {
         "format": _FORMAT,
         "generator": "tools/render_readme_visuals.py",
+        "layout_contract": {
+            "geometry": "viewbox-and-active-fill-bounds.v1",
+            "minimum_text_contrast_ratio": _MINIMUM_TEXT_CONTRAST_RATIO,
+            "text_width": "explicit-textLength.v1",
+        },
         "official": False,
         "renderer_version": _RENDERER_VERSION,
         "sources": source_records,
