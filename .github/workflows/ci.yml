@@ -45,6 +45,9 @@ jobs:
       - name: Type check
         run: mypy --strict src test tools
 
+      - name: Verify source and wheel distributions
+        run: python tools/verify_distribution.py
+
       - name: Verify candidate evidence
         run: python tools/workspace100_candidate_evidence.py check
 

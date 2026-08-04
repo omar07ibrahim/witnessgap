@@ -66,6 +66,7 @@ checked. It is not an official or public benchmark release.
 | Workspace-100 | 5 templates, 50 variants and twin pairs, 100 sealed completions, 4 evidence views, 300 participant cases | Learned-system or production-agent benchmark claims |
 | Evaluation | 4 frozen controls, 1,200 fresh-process records, closed ClaimSet, exact rational scoring | A second clean capture under another valid transient schedule; gate 12 remains open |
 | Release integrity | 13 payloads, closed 25-binding manifest, read-only-mode materialization, rooted load, full semantic replay | Independently authenticated public root, signatures, attestation, or provenance history |
+| Python distribution | Closed sdist surface, archive preflight, repeated byte-identical builds, sdist-built pure-Python wheel, RECORD replay, no-index clean-venv CLI probes | Network isolation, PyPI publication, package signing, or runtime support beyond exact CPython 3.12.3 on Linux x86_64 |
 | Worker lifecycle | Fresh directory and process session, closed environment, bounded pipes, timeout and process-group cleanup | Hostile-code containment; gate 16 remains open |
 
 ## Quick start
@@ -87,6 +88,9 @@ python --version
 
 python -m pip install --require-hashes -r requirements-dev.lock
 python -m pip install --no-deps --no-build-isolation --editable .
+
+# Build the declared sdist, rebuild its wheel, install with no index, and probe the CLI.
+python tools/verify_distribution.py
 ```
 
 Verify the smallest causal-twin certificate:
@@ -139,7 +143,7 @@ construction cardinality. This command builds the deterministic corpus, public
 views, and baseline registry in process; it does **not** launch 1,200 workers or
 report a benchmark result.
 
-![The reproducible setup flows from the pinned Python version and hash-locked environment into an editable CLI and CI checks over source, tests, tools, committed evidence, visuals, and the installed command.](docs/images/readme/verification-flow.svg)
+![The reproducible setup flows from the pinned Python version and hash-locked environment through a validated source archive and wheel into CI checks over source, tests, tools, committed evidence, visuals, and clean-environment CLI probes.](docs/images/readme/verification-flow.svg)
 
 ## Certificate API
 
@@ -379,13 +383,21 @@ ruff check src test tools
 mypy --strict src test tools
 python tools/workspace100_candidate_evidence.py check
 python tools/render_readme_visuals.py check
+python tools/verify_distribution.py
 witnessgap example
 pytest
 ```
 
 CI runs on Ubuntu 24.04 with CPython 3.12.3, read-only repository permissions,
 SHA-pinned GitHub Actions, a hash-locked dependency install, and an editable
-package install. The candidate evidence and README visual checks fail when
+package install. CI also builds the declared source archive twice, rejects
+unsafe or colliding archive paths, rebuilds a byte-identical pure-Python wheel
+twice from that extracted sdist, replays wheel metadata and `RECORD`, installs
+with no package index into a clean virtual environment, and probes both module
+and console entry points outside the checkout. The `py3-none-any` tag records
+the absence of a native ABI; this repository verifies execution only on exact
+CPython 3.12.3 and Linux x86_64, and the no-index install is not a claim of
+network sandboxing. The candidate evidence and README visual checks fail when
 committed artifacts drift from their reviewed sources.
 
 The SVGs in this README are generated from production constructors, enums,

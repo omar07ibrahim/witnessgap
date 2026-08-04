@@ -11,7 +11,7 @@
   "sources": [
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "93ba7115ca4a969ee58fdad6215bfe0da80b4b4e82fdcc6c94705217b42d663b"
+      "sha256": "9ce027a527f04ac653cdadb4e2098d6e9c5ec52098162e6bb62aa1f728255143"
     },
     {
       "path": ".python-version",
@@ -23,7 +23,7 @@
     },
     {
       "path": "pyproject.toml",
-      "sha256": "0544da9e8ce7510835bc22d2dc3b77fe6f92010ebd32d56e4d35bed10060f6d6"
+      "sha256": "d55a75ea8b77f49be69908ed8671852b2e674bfef807540c10d572fab3d888a0"
     },
     {
       "path": "requirements-dev.lock",
@@ -79,7 +79,11 @@
     },
     {
       "path": "tools/render_readme_visuals.py",
-      "sha256": "f40472fde2020efa93b7adbacca72479615d31f1f5b89c6d959c2aea21e0848b"
+      "sha256": "fa9989c24fbb921a894da9522cb4b02e33992acc2f8814a5dcc8d65d6678abbd"
+    },
+    {
+      "path": "tools/verify_distribution.py",
+      "sha256": "f0ce496aa684665562e93a2a882055a7639213946cb526de43208f3d02090fc4"
     },
     {
       "path": "tools/workspace100_candidate_evidence.py",
@@ -883,13 +887,16 @@
       "title": "Workspace-100 candidate artifact inventory and exact sizes"
     },
     {
-      "description": "A source-derived setup flow from the pinned Python version, exact hashed development lock, package metadata, and current GitHub Actions workflow. CI installs the editable package, checks source, tests, and tools with Ruff and strict mypy, validates candidate evidence and README visuals, smoke-tests the installed CLI, and runs pytest. The boundary panel states what these local gates do not establish.",
+      "description": "A source-derived setup flow from the pinned Python version, exact hashed development lock, package metadata, distribution verifier, and current GitHub Actions workflow. CI installs the editable package, checks source with Ruff and strict mypy, proves byte-identical repeated sdist and wheel builds, validates their archive and metadata surfaces, and probes the wheel in a clean environment. It also validates candidate evidence and README visuals, smoke-tests the installed CLI, and runs pytest. The boundary panel states what these local gates do not establish.",
       "facts": {
         "build_requirement": "hatchling==1.27.0",
         "ci_check_commands": [
           "ruff check src test tools",
           "mypy --strict src test tools",
           "pytest"
+        ],
+        "ci_distribution_commands": [
+          "python tools/verify_distribution.py"
         ],
         "ci_install_commands": [
           "python -m pip install --require-hashes -r requirements-dev.lock",
@@ -925,7 +932,7 @@
         ],
         "missing_ci_commands": [],
         "python_version": "3.12.3",
-        "requires_python": ">=3.12"
+        "requires_python": ">=3.12,<3.13"
       },
       "file": "verification-flow.svg",
       "nonclaims": [
@@ -934,17 +941,18 @@
         "The local process backend is not a hostile-code sandbox."
       ],
       "official": false,
-      "sha256": "84e41cbe57d231be5e3d1adbf38c9b816f6c693b5453f7f478a9a7a7a782d097",
+      "sha256": "431f1b3325d04c09c9f1b80e56943c53b62278ac662296ac5c263291c3626645",
       "source_paths": [
         ".github/workflows/ci.yml",
         ".python-version",
         "pyproject.toml",
-        "requirements-dev.lock"
+        "requirements-dev.lock",
+        "tools/verify_distribution.py"
       ],
       "source_records": [
         {
           "path": ".github/workflows/ci.yml",
-          "sha256": "93ba7115ca4a969ee58fdad6215bfe0da80b4b4e82fdcc6c94705217b42d663b"
+          "sha256": "9ce027a527f04ac653cdadb4e2098d6e9c5ec52098162e6bb62aa1f728255143"
         },
         {
           "path": ".python-version",
@@ -952,11 +960,15 @@
         },
         {
           "path": "pyproject.toml",
-          "sha256": "0544da9e8ce7510835bc22d2dc3b77fe6f92010ebd32d56e4d35bed10060f6d6"
+          "sha256": "d55a75ea8b77f49be69908ed8671852b2e674bfef807540c10d572fab3d888a0"
         },
         {
           "path": "requirements-dev.lock",
           "sha256": "803221feb50ae365cb12301de1338bee415f6af96b886baefbb14085a511e917"
+        },
+        {
+          "path": "tools/verify_distribution.py",
+          "sha256": "f0ce496aa684665562e93a2a882055a7639213946cb526de43208f3d02090fc4"
         }
       ],
       "title": "Reproducible setup and current verification coverage"

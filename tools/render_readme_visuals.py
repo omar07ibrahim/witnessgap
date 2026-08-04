@@ -38,6 +38,7 @@ PYTHON_VERSION_PATH: Final = ROOT / ".python-version"
 DEVELOPMENT_LOCK_PATH: Final = ROOT / "requirements-dev.lock"
 PYPROJECT_PATH: Final = ROOT / "pyproject.toml"
 CI_WORKFLOW_PATH: Final = ROOT / ".github" / "workflows" / "ci.yml"
+DISTRIBUTION_TOOL_PATH: Final = ROOT / "tools" / "verify_distribution.py"
 
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
@@ -2365,6 +2366,7 @@ class SetupSnapshot:
     console_entrypoint: str
     ci_install_commands: tuple[str, ...]
     ci_check_commands: tuple[str, ...]
+    ci_distribution_commands: tuple[str, ...]
     ci_reproducibility_commands: tuple[str, ...]
     missing_ci_commands: tuple[str, ...]
 
@@ -2435,9 +2437,15 @@ def _setup_snapshot() -> SetupSnapshot:
         "python tools/render_readme_visuals.py check",
         "witnessgap example",
     )
+    distribution_commands = ("python tools/verify_distribution.py",)
     missing_commands = tuple(
         command
-        for command in (*install_commands, *check_commands, *reproducibility_commands)
+        for command in (
+            *install_commands,
+            *check_commands,
+            *distribution_commands,
+            *reproducibility_commands,
+        )
         if command not in ci_source
     )
     required_ci_fragments = (
@@ -2446,11 +2454,12 @@ def _setup_snapshot() -> SetupSnapshot:
         "python-version-file: .python-version",
         *install_commands,
         *check_commands,
+        *distribution_commands,
         *reproducibility_commands,
     )
     if (
         python_version != "3.12.3"
-        or requires_python != ">=3.12"
+        or requires_python != ">=3.12,<3.13"
         or build_requirement != "hatchling==1.27.0"
         or console_entrypoint != "witnessgap.cli:main"
         or any(fragment not in ci_source for fragment in required_ci_fragments)
@@ -2467,6 +2476,7 @@ def _setup_snapshot() -> SetupSnapshot:
         console_entrypoint=console_entrypoint,
         ci_install_commands=install_commands,
         ci_check_commands=check_commands,
+        ci_distribution_commands=distribution_commands,
         ci_reproducibility_commands=reproducibility_commands,
         missing_ci_commands=missing_commands,
     )
@@ -2477,15 +2487,17 @@ def _render_verification_flow() -> Visual:
     title = "Reproducible setup and current verification coverage"
     description = (
         "A source-derived setup flow from the pinned Python version, exact hashed development "
-        "lock, package metadata, and current GitHub Actions workflow. CI installs the editable "
-        "package, checks source, tests, and tools with Ruff and strict mypy, validates candidate "
+        "lock, package metadata, distribution verifier, and current GitHub Actions workflow. "
+        "CI installs the editable package, checks source with Ruff and strict mypy, proves "
+        "byte-identical repeated sdist and wheel builds, validates their archive and metadata "
+        "surfaces, and probes the wheel in a clean environment. It also validates candidate "
         "evidence and README visuals, smoke-tests the installed CLI, and runs pytest. The "
         "boundary panel states what these local gates do not establish."
     )
     svg = Svg(1600, 1200, title=title, description=description)
     svg.header(
         "WitnessGap / committed setup contract",
-        "Pinned runtime → hashed install → editable CLI → current CI",
+        "Pinned runtime → hashed install → validated wheel → current CI",
         "Every listed gate is configured today; explicit trust and isolation boundaries remain.",
     )
 
@@ -2521,7 +2533,7 @@ def _render_verification_flow() -> Visual:
             "04 · CURRENT CI",
             (
                 "lint/type: src + test + tools",
-                "3 reproducibility gates",
+                "4 reproducibility gates",
                 "pytest: configured test suite",
             ),
             _GREEN,
@@ -2604,20 +2616,25 @@ def _render_verification_flow() -> Visual:
             _BLUE,
         ),
         (
-            "03 · INSTALLED CONSOLE ENTRYPOINT",
+            "03 · REPEATED SDIST → WHEEL → CLEAN VENV",
+            setup.ci_distribution_commands[0],
+            _GOLD,
+        ),
+        (
+            "04 · INSTALLED CONSOLE ENTRYPOINT",
             setup.ci_reproducibility_commands[2],
             _GREEN,
         ),
     )
     for index, (heading, command, color) in enumerate(gate_details):
-        y = 558 + index * 105
+        y = 550 + index * 78
         svg.text(848, y, heading, size=12, color=color, weight=700)
-        svg.text(848, y + 39, command, size=14, color=_TEXT, weight=700)
+        svg.text(848, y + 31, command, size=14, color=_TEXT, weight=700)
     svg.pill(
         848,
         852,
         410,
-        "3 / 3 present in current CI",
+        "4 / 4 present in current CI",
         fill="#163022",
         stroke=_GREEN,
     )
@@ -2639,7 +2656,8 @@ def _render_verification_flow() -> Visual:
             weight=700,
         )
     svg.footer(
-        ".python-version · requirements-dev.lock · pyproject.toml · ci.yml",
+        ".python-version · requirements-dev.lock · pyproject.toml · ci.yml · "
+        "verify_distribution.py",
         "local gates do not establish external auth, full capture replay, or sandboxing",
     )
     return Visual(
@@ -2652,6 +2670,7 @@ def _render_verification_flow() -> Visual:
             DEVELOPMENT_LOCK_PATH,
             PYPROJECT_PATH,
             CI_WORKFLOW_PATH,
+            DISTRIBUTION_TOOL_PATH,
         ),
         nonclaims=(
             "Local drift pins and content digests are not independent external authentication.",
@@ -2661,6 +2680,7 @@ def _render_verification_flow() -> Visual:
         facts={
             "build_requirement": setup.build_requirement,
             "ci_check_commands": list(setup.ci_check_commands),
+            "ci_distribution_commands": list(setup.ci_distribution_commands),
             "ci_install_commands": list(setup.ci_install_commands),
             "ci_reproducibility_commands": list(setup.ci_reproducibility_commands),
             "console_entrypoint": setup.console_entrypoint,

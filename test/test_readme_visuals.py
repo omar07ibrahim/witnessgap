@@ -371,6 +371,7 @@ def test_verification_flow_records_current_ci_gates_and_boundaries() -> None:
     setup_record = by_file["verification-flow.svg"]
     setup_facts = _object(setup_record["facts"])
     assert setup_facts["python_version"] == "3.12.3"
+    assert setup_facts["requires_python"] == ">=3.12,<3.13"
     assert setup_facts["locked_package_count"] == EXPECTED_LOCKED_PACKAGE_COUNT
     assert setup_facts["lock_hash_count"] == EXPECTED_LOCKED_PACKAGE_COUNT
     assert setup_facts["console_entrypoint"] == "witnessgap.cli:main"
@@ -384,6 +385,7 @@ def test_verification_flow_records_current_ci_gates_and_boundaries() -> None:
         "python tools/render_readme_visuals.py check",
         "witnessgap example",
     ]
+    assert setup_facts["ci_distribution_commands"] == ["python tools/verify_distribution.py"]
     assert setup_facts["current_ci_omission_count"] == 0
     assert setup_facts["missing_ci_commands"] == []
     assert setup_record["nonclaims"] == [
@@ -398,4 +400,5 @@ def test_verification_flow_records_current_ci_gates_and_boundaries() -> None:
         ".python-version",
         "pyproject.toml",
         "requirements-dev.lock",
+        "tools/verify_distribution.py",
     }

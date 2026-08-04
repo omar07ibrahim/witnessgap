@@ -7,7 +7,7 @@ name = "witnessgap"
 version = "0.0.1"
 description = "Identifiability certificates for tool-agent failure attribution"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [
   { name = "Omar Ibrahim", email = "31526072+omar07ibrahim@users.noreply.github.com" },
@@ -32,6 +32,21 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/witnessgap"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/.github",
+  "/.gitignore",
+  "/.python-version",
+  "/LICENSE",
+  "/README.md",
+  "/docs",
+  "/pyproject.toml",
+  "/requirements-dev.lock",
+  "/src",
+  "/test",
+  "/tools",
+]
 
 [tool.mypy]
 python_version = "3.12"
